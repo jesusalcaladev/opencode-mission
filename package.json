@@ -1,0 +1,44 @@
+{
+  "name": "opencode-mission",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Autonomous mission supervisor for OpenCode: plans work, dispatches parallel sub-agents, and verifies executable criteria until the task is actually done.",
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "agent",
+    "autonomous-agent",
+    "subagents",
+    "verification",
+    "long-running-tasks"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jesusalcaladev/opencode-mission.git"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "src",
+    "demos",
+    "CONTRACT.md",
+    "README.md",
+    "CONTRIBUTING.md",
+    "CHANGELOG.md",
+    "SECURITY.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "@opencode/plugin": "2.3.2"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "test:watch": "node --test --watch test/*.test.js"
+  }
+}

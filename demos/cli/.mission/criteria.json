@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "checks": [
+    {
+      "id": "version",
+      "cmd": "node cli.js --version",
+      "expect": "contains:1.0.0",
+      "timeout_ms": 10000
+    },
+    {
+      "id": "sum",
+      "cmd": "node cli.js 2 3",
+      "expect": "contains:5",
+      "timeout_ms": 10000
+    },
+    {
+      "id": "tests-present",
+      "cmd": "grep -c '^test(' cli.test.js",
+      "expect": "contains:3",
+      "timeout_ms": 10000
+    },
+    {
+      "id": "tests",
+      "cmd": "node --test",
+      "expect": "exit0",
+      "timeout_ms": 30000
+    }
+  ],
+  "review": {
+    "require_diff_review": false,
+    "forbid_test_deletions": true
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "tasks": [
+    {
+      "id": 1,
+      "subject": "Create cli.js with --version and number summing",
+      "status": "pending",
+      "blocked_by": [],
+      "verify": "version"
+    },
+    {
+      "id": 2,
+      "subject": "Create cli.test.js with three passing tests",
+      "status": "pending",
+      "blocked_by": [1],
+      "verify": "tests-present"
+    },
+    {
+      "id": 3,
+      "subject": "Make the full test suite pass",
+      "status": "pending",
+      "blocked_by": [1, 2],
+      "verify": "tests"
+    }
+  ]
+}
