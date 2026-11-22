@@ -76,6 +76,23 @@ a named string); it never uses a vacuous check such as `node --test` with zero t
 A path instead of prose keeps the legacy behavior: `/mission start ./some/dir` runs a
 pre-authored `.mission/` directory unchanged.
 
+## Roles in one workspace
+
+All agents share the same working tree; no worktrees are created. What separates
+them is **permission and stage**, not a checkout:
+
+| Role | Writes | Job |
+| --- | --- | --- |
+| Investigator | no | read the code, report findings via `mission_report` |
+| Implementer | only its task's `files` | do the assigned task |
+| Tester | no | run checks, report results |
+| Reviewer | no | review the diff, emit `SEVERITY: high|medium|low` lines |
+
+The harness owns the stage machine `investigate → implement → verify → review →
+done`. An agent cannot skip a stage. Completion requires a clean review; a high
+finding reopens the tasks (up to 2 attempts) and then blocks with `review-high`.
+All git commits go through the mission write queue.
+
 ## Workers: not a single thread
 
 At mission start the supervisor dispatches one child session per ready task, grouped

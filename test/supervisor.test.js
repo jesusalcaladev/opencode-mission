@@ -15,6 +15,7 @@ import {
   saveProgress,
   saveRoadmap,
   saveState,
+  saveTasks,
   writeTextAtomic,
 } from "../src/mission.js";
 
@@ -94,6 +95,9 @@ async function fixture() {
       best_green: 0,
       strategy_tier: 1,
       last_checks: [],
+      stage: "done",
+      stage_reports: {},
+      review_attempts: 0,
     }),
   );
   return root;
@@ -390,6 +394,90 @@ test("watchdog: a stalled mission gets a validated new plan from the model", asy
     const journal = await readFile(path.join(missionDir(root), "journal.md"), "utf8");
     assert.match(journal, /re-plan applied/);
     assert.equal((await loadState(root)).strategy_tier, 1);
+    sup.dispose();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("roles: read-only agents cannot write and implementers stay in their files", async () => {
+  const root = await fixture();
+  try {
+    const sup = new Supervisor(fakeCtx());
+    await sup.start("ses_test", root);
+    sup.roles.set("ses_test", "reviewer");
+    assert.match(await sup.toolWrite("ses_test", { path: "x.txt", content: "hello" }), /read-only/);
+
+    sup.roles.set("ses_test", "implementer");
+    const tasks = await loadTasks(root);
+    tasks[0].files = ["done.txt"];
+    await saveTasks(root, tasks);
+    sup.workers.set("ses_test", { root, taskId: 1, leadID: "lead" });
+    assert.match(
+      await sup.toolWrite("ses_test", { path: "other.txt", content: "hello" }),
+      /outside task #1 files/,
+    );
+    assert.match(await sup.toolWrite("ses_test", { path: "done.txt", content: "hello" }), /Wrote done\.txt/);
+    sup.dispose();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("pipeline: high severity review blocks completion, clean review allows it", async () => {
+  const root = await fixture();
+  try {
+    const sup = new Supervisor(fakeCtx());
+    await sup.start("ses_test", root);
+    const state = await loadState(root);
+    const tasks = await loadTasks(root);
+    for (const t of tasks) t.status = "completed";
+
+    state.stage = "review";
+    state.review_attempts = 0;
+    state.stage_reports = { review: { text: "found a bug\nSEVERITY: high — wrong output", at: "" } };
+    assert.equal((await sup.runRolePipeline("ses_test", root, state, tasks, [], { type: "complete" })).type, "continue");
+    assert.equal(state.review_attempts, 1);
+
+    state.stage = "review";
+    state.review_attempts = 2;
+    state.stage_reports = { review: { text: "SEVERITY: high — still broken", at: "" } };
+    assert.equal((await sup.runRolePipeline("ses_test", root, state, tasks, [], { type: "complete" })).reason, "review-high");
+
+    state.stage = "review";
+    state.stage_reports = { review: { text: "SEVERITY: low — style only", at: "" } };
+    assert.equal((await sup.runRolePipeline("ses_test", root, state, tasks, [], { type: "complete" })).type, "complete");
+    sup.dispose();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("pipeline: investigate and review stages dispatch their own agents", async () => {
+  const root = await fixture();
+  try {
+    const ctx = fakeCtx();
+    const sup = new Supervisor(ctx);
+    await sup.start("ses_test", root);
+    const state = await loadState(root);
+    state.stage = "investigate";
+    const afterInvestigate = await sup.runRolePipeline("ses_test", root, state, [], [], { type: "complete" });
+    assert.equal(afterInvestigate.type, "continue");
+    assert.equal(state.stage, "implement");
+    assert.ok(ctx.workerPrompts.some((p) => p.text.includes("MISSION INVESTIGATOR")));
+
+    state.stage = "review";
+    delete state.stage_reports?.review;
+    const afterReview = await sup.runRolePipeline(
+      "ses_test",
+      root,
+      state,
+      [{ id: 1, status: "completed" }],
+      [],
+      { type: "complete" },
+    );
+    assert.equal(afterReview.type, "continue");
+    assert.ok(ctx.workerPrompts.some((p) => p.text.includes("MISSION REVIEWER")));
     sup.dispose();
   } finally {
     await rm(root, { recursive: true, force: true });

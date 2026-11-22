@@ -61,6 +61,31 @@ export function workerBrief({ task, objective, workspace }) {
   ].join("\n");
 }
 
+export function investigatorPrompt({ objective, workspace }) {
+  return [
+    "[MISSION INVESTIGATOR]",
+    `Objective: ${objective}`,
+    `Workspace: ${workspace}`,
+    "",
+    "Read-only stage. Do NOT write or edit files.",
+    "Map the relevant files, current behavior and constraints. Call mission_report(role='investigator', text='...') with a concise findings summary before you finish.",
+  ].join("\n");
+}
+
+export function reviewerPrompt({ objective, workspace, checks = [] }) {
+  return [
+    "[MISSION REVIEWER]",
+    `Objective: ${objective}`,
+    `Workspace: ${workspace}`,
+    "",
+    "Read-only stage. Do NOT write or edit files.",
+    "Review the diff and the files named in the checks. Look for wrong behavior, regressions, debug leftovers and weakened tests.",
+    "Every finding MUST be a line starting with 'SEVERITY: high', 'SEVERITY: medium' or 'SEVERITY: low'.",
+    `Checks to consider: ${checks.map((c) => c.id).join(", ") || "none"}`,
+    "Call mission_report(role='reviewer', text='...') with your findings before you finish. If there are no problems, write 'SEVERITY: low — no blocking findings'.",
+  ].join("\n");
+}
+
 export function reportsText(reports) {
   const lines = Object.entries(reports ?? {}).map(([id, report]) => `- task #${id}: ${report.summary ?? "no summary"}`);
   return lines.length ? `Worker reports:\n${lines.join("\n")}` : "No worker reports.";

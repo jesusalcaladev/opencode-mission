@@ -86,6 +86,7 @@ The mission ends with `status: aborted` and `finish_reason: stop-file`. Remove
 | `lease expired` in journal | A worker went silent | Expected; the harness retried it |
 | `rescue timer re-admitted` | A session went quiet without an idle event | Expected; the supervisor resumed it |
 | `chain exhausted` | All roadmap items are done | Add more items to `roadmap.md` |
+| `review-high` | Reviewer found high severity issues twice | Read `state.stage_reports.review`, fix, resume |
 
 ## Long-run checklist
 

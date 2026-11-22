@@ -25,6 +25,7 @@ src/
     lease.js               claim / renew / expire / retry (pure)
     watchdog.js            stall detection and re-plan prompts (pure)
     chain.js               roadmap parsing, chain decision, budget extension (pure)
+    roles.js               roles, permissions, review parsing, stage machine (pure)
 
 test/                      node:test suites; no OpenCode, no network
 ```
@@ -39,7 +40,8 @@ with Bun, which rejects test globals outside a test runner. All tests live in
 /mission start <objective>
   -> planner (free model, validated by normalizePlan)
   -> .mission/{mission,criteria,tasks,progress,charter,memory,summary}.json/md
-  -> worker sessions in waves (disjoint files, bounded attempts)
+  -> investigator (read-only) -> implementer waves (assigned files only)
+  -> harness checks -> reviewer (read-only, SEVERITY findings) -> commit
   -> worker calls mission_task_done(id, status, summary, evidence)
   -> harness checks the task's verify check before accepting the report
   -> session.idle -> re-run ALL criteria -> evidence -> apply task results

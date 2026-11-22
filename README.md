@@ -33,6 +33,10 @@ and **task leases** (a dead worker's task is reclaimed instead of stuck forever)
 - **Automatic model selection** — OpenCode's default is replaced by a free,
   tools-capable model for the planner, lead and workers. Quota errors rotate models
   with exponential backoff. No model configuration required.
+- **Specialized roles in one workspace** — Investigator (read-only), Implementer
+  (writes only its assigned files), Tester and Reviewer; no worktrees needed.
+- **Review gate** — completion requires a clean `SEVERITY` review; high findings
+  reopen the work and then block.
 - **Durable state** — `state.json`, `journal.md`, `evidence/` and a session→mission
   registry survive restarts; `/mission resume` and auto-resume pick up where it left off.
 - **Context handoff** — rotate to a fresh session on a schedule; the journal is the memory.
@@ -146,6 +150,7 @@ designed to be ported to other harnesses (a zode implementation is planned).
 | `mission_verdict` | Declare `met` / `blocked` (harness still verifies) |
 | `mission_task_done` | Worker completion report (harness still verifies) |
 | `mission_heartbeat` | Renew the worker's task lease while working |
+| `mission_report` | Store read-only stage findings (investigator/reviewer) |
 | `mission_log` | Append to the durable journal |
 
 ## Configuration

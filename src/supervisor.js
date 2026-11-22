@@ -11,10 +11,16 @@ import { mkdir, readFile } from "node:fs/promises";
 import { runChecks } from "./checks.js";
 import { checkTestIntegrity, createWorktree, gitCommit } from "./verify.js";
 import { createPlan, fallbackPlan, normalizePlan } from "./planner.js";
-import { reportsText, wavesFor, workerBrief, workerPrompt } from "./team.js";
+import { investigatorPrompt, reportsText, reviewerPrompt, wavesFor, workerBrief, workerPrompt } from "./team.js";
 import {
   STATUS,
+  STAGE,
+  ROLE,
   TASK_STATUS,
+  canWrite,
+  roleForStage,
+  parseReview,
+  stageFor,
   VERSION,
   appendJournal,
   applyExtension,
@@ -91,6 +97,7 @@ export class Supervisor {
     this.registry = [];
     this.busy = new Set();
     this.workers = new Map();
+    this.roles = new Map();
     this.knownWorkers = new Set();
     this.briefs = new Map();
     this.stateQueue = new Map();
@@ -102,6 +109,7 @@ export class Supervisor {
     this.missionsRoot = options.missionsRoot ? path.resolve(options.missionsRoot) : null;
     this.enableWorkers = options.enableWorkers !== false;
     this.enableChaining = options.enableChaining !== false;
+    this.enableRoles = options.enableRoles !== false;
   }
 
   // ---- binding / restart recovery -------------------------------------------
@@ -624,6 +632,109 @@ export class Supervisor {
     this.briefs.set(sessionID, buildBrief({ root, missionText, state, tasks, journal, memory, summary, progress, results }));
   }
 
+  // One shared workspace, specialized agents. The harness owns the stage
+  // transitions; an agent cannot skip review or write from a read-only role.
+  async dispatchRoleStage(sessionID, root, role, promptText) {
+    const created = await this.ctx.session.create({
+      parentID: sessionID,
+      title: `mission ${role}`,
+      location: { directory: this.ctx.location.directory },
+      model: this.options.model ?? this.pickFreeModel(await this.modelCatalog()),
+    });
+    const id = created?.id ?? created?.data?.id;
+    if (!id) return null;
+    this.bind(id, root, false);
+    this.workers.set(id, { root, taskId: 0, leadID: sessionID, role });
+    this.roles.set(id, role);
+    this.knownWorkers.add(id);
+    this.briefs.set(id, `MISSION ${role.toUpperCase()} — read-only unless the role is implementer. Report with mission_report.`);
+    await this.ctx.session.prompt({ sessionID: id, text: promptText, delivery: "queue" });
+    await this.waitWithTimeout(id, 120_000);
+    const fresh = await loadState(root);
+    this.workers.delete(id);
+    this.bySession.delete(id);
+    this.roles.delete(id);
+    this.briefs.delete(id);
+    return fresh.stage_reports?.[role];
+  }
+
+  async runRolePipeline(sessionID, root, state, tasks, results, decision) {
+    if (!this.enableRoles) return decision;
+    const objective = objectiveOf(await this.readMission(root));
+    const stage = state.stage ?? STAGE.IMPLEMENT;
+    const reviewText = state.stage_reports?.review?.text ?? "";
+    const next = stageFor({
+      stage,
+      tasksDone: tasks.length > 0 && tasks.every((t) => t.status === TASK_STATUS.COMPLETED),
+      review: parseReview(reviewText),
+      reviewAttempts: state.review_attempts ?? 0,
+    });
+    if (next.stage !== stage) {
+      state.stage = next.stage;
+      await this.journal(root, `stage: ${stage} → ${next.stage}`);
+      await this.saveStateSafe(root, state);
+    }
+
+    if (stage === STAGE.REVIEW && !reviewText) {
+      await this.dispatchRoleStage(
+        sessionID,
+        root,
+        ROLE.REVIEWER,
+        reviewerPrompt({ objective, workspace: root, checks: results.map((r) => ({ id: r.id })) }),
+      );
+      await this.journal(root, "reviewer dispatched; completion held until review is clean");
+      return { type: "continue" };
+    }
+
+    if (stage === STAGE.INVESTIGATE) {
+      const report = await this.dispatchRoleStage(
+        sessionID,
+        root,
+        ROLE.INVESTIGATOR,
+        investigatorPrompt({ objective, workspace: root }),
+      );
+      if (report?.text) await saveMemory(root, `${await loadMemory(root)}\nINVESTIGATION:\n${report.text}`.trim());
+      state.stage = STAGE.IMPLEMENT;
+      await this.journal(root, "investigator finished; implementers may now write");
+      await this.saveStateSafe(root, state);
+      return { type: "continue" };
+    }
+
+    if (next.decision === "blocked") return { type: "stop", reason: "review-high" };
+    if (next.decision === "retry") {
+      state.review_attempts = (state.review_attempts ?? 0) + 1;
+      state.stage = STAGE.IMPLEMENT;
+      const stored = await loadTasks(root);
+      for (const t of stored) t.status = TASK_STATUS.PENDING;
+      const leased = await loadProgress(root);
+      for (const p of leased) {
+        p.status = TASK_STATUS.PENDING;
+        p.owner = null;
+        p.lease_until = 0;
+        p.attempts = 0;
+      }
+      if (state.stage_reports) delete state.stage_reports.review;
+      await Promise.all([this.saveTasksSafe(root, stored), this.saveProgressSafe(root, leased), this.saveStateSafe(root, state)]);
+      await this.journal(root, `review requires rework (attempt ${state.review_attempts})`);
+      return { type: "continue" };
+    }
+
+    if (next.stage === STAGE.REVIEW) {
+      if (!reviewText) {
+        await this.dispatchRoleStage(
+          sessionID,
+          root,
+          ROLE.REVIEWER,
+          reviewerPrompt({ objective, workspace: root, checks: results.map((r) => ({ id: r.id })) }),
+        );
+        await this.journal(root, "reviewer dispatched; completion held until review is clean");
+        return { type: "continue" };
+      }
+      return { type: "complete" };
+    }
+    return decision;
+  }
+
   // A stalled mission gets a NEW plan, not a louder prompt. The harness applies
   // it only after it passes the same validation as the initial plan.
   async maybeReplan(root, state, results, tasks) {
@@ -776,7 +887,8 @@ export class Supervisor {
         }
         if (!id) continue;
         this.bind(id, root, false);
-        this.workers.set(id, { root, taskId: task.id, leadID });
+        this.workers.set(id, { root, taskId: task.id, leadID, role: ROLE.IMPLEMENTER });
+        this.roles.set(id, ROLE.IMPLEMENTER);
         this.knownWorkers.add(id);
         if (!this.briefs) this.briefs = new Map();
         this.briefs.set(id, workerBrief({ task, objective, workspace: workRoot }));
@@ -829,6 +941,7 @@ export class Supervisor {
           if (t) t.status = retryable(leased, w.task.id) ? TASK_STATUS.PENDING : TASK_STATUS.FAILED;
         }
         this.workers.delete(w.id);
+        this.roles.delete(w.id);
         this.bySession.delete(w.id);
         this.briefs?.delete(w.id);
       }
@@ -913,6 +1026,8 @@ export class Supervisor {
         }
       }
 
+      decision = await this.runRolePipeline(sessionID, root, state, tasks, results, decision);
+
       if (decision.type === "continue" && this.enableWorkers) {
         const outcome = await this.runWorkers(sessionID, root, state, tasks, workRoot);
         if (outcome.ran) {
@@ -938,7 +1053,9 @@ export class Supervisor {
       }
 
       if (anyProgress) {
-        const commit = await gitCommit(workRoot, `mission(${state.id ?? "mission"}): turn ${state.turn} — verified progress`);
+        const commit = await this.serialize(root, () =>
+          gitCommit(workRoot, `mission(${state.id ?? "mission"}): turn ${state.turn} — verified progress`),
+        );
         if (commit.ok) {
           state.last_commit = commit.sha;
           await this.journal(root, `checkpoint committed: ${commit.sha ?? commit.reason}`);
@@ -1028,7 +1145,16 @@ export class Supervisor {
     const root = this.rootFor(sessionID);
     if (!root) return "No active mission.";
     if (typeof rel !== "string" || typeof content !== "string") return "path and content are required strings.";
+    const role = this.roles.get(sessionID) ?? ROLE.IMPLEMENTER;
+    if (!canWrite(role)) return `Role '${role}' is read-only in this mission. Only the implementer writes files.`;
     const normalized = rel.replace(/\\/g, "/").replace(/^\.\//, "");
+    const worker = this.workers.get(sessionID);
+    if (worker?.taskId) {
+      const assigned = (await loadTasks(root)).find((t) => t.id === worker.taskId)?.files ?? [];
+      if (assigned.length > 0 && !assigned.some((f) => normalized === f || normalized.startsWith(`${f}/`))) {
+        return `Refusing to write outside task #${worker.taskId} files: ${normalized}`;
+      }
+    }
     // The harness owns the contract. Allowing the model to rewrite criteria,
     // tasks or state would let it define "done" as whatever it wrote.
     if (normalized === ".mission" || normalized.startsWith(".mission/")) {
@@ -1116,6 +1242,22 @@ export class Supervisor {
   }
   saveTasksSafe(root, tasks) {
     return this.serialize(root, () => saveTasks(root, tasks));
+  }
+
+  async toolReport(sessionID, input) {
+    const root = this.rootFor(sessionID);
+    if (!root) return "No active mission.";
+    const role = this.roles.get(sessionID) ?? String(input?.role ?? "agent");
+    const text = String(input?.text ?? "").trim();
+    if (text.length < 3) return "report text is required (at least 3 characters).";
+    return this.serialize(root, async () => {
+      const state = await loadState(root);
+      if (!state.stage_reports || typeof state.stage_reports !== "object") state.stage_reports = {};
+      state.stage_reports[role] = { text: text.slice(0, 8000), at: new Date().toISOString() };
+      await this.saveStateSafe(root, state);
+      await this.journal(root, `stage report from ${role}: ${text.slice(0, 200)}`);
+      return `Report stored for role '${role}'.`;
+    });
   }
 
   async toolHeartbeat(sessionID, input) {

@@ -21,6 +21,7 @@ import {
 import { selectTask, applyTaskResults, nextStrategy, decideNext } from "./mission/decide.js";
 import { buildBrief, distill, MEMORY_BUDGET } from "./mission/memory.js";
 import { needsReplan, replanPrompt, afterReplan, STALL_TURNS } from "./mission/watchdog.js";
+import { ROLE, STAGE, canWrite, parseReview, stageFor, roleForStage, MAX_REVIEW_ATTEMPTS } from "./mission/roles.js";
 import {
   DEFAULT_MAX_EXTENSIONS,
   EXTEND_TURNS,
@@ -69,6 +70,13 @@ export {
   replanPrompt,
   afterReplan,
   STALL_TURNS,
+  ROLE,
+  STAGE,
+  canWrite,
+  parseReview,
+  stageFor,
+  roleForStage,
+  MAX_REVIEW_ATTEMPTS,
   DEFAULT_MAX_EXTENSIONS,
   EXTEND_TURNS,
   EXTEND_MINUTES,

@@ -8,6 +8,17 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Specialized roles in the **same workspace** (no worktrees): Investigator
+  (read-only research), Implementer (writes only assigned `files`), Tester and
+  Reviewer (read-only). The harness owns stage transitions and tool permissions.
+- Review gate: completion requires a clean review; `SEVERITY: high` reopens the
+  tasks (max 2 attempts) and then blocks with `review-high`.
+- `mission_report(role, text)` for read-only stage findings stored in
+  `state.stage_reports`.
+- Git commits are serialized through the mission write queue.
+
+### Added
+
 - Mission chaining: `.mission/roadmap.md` checklists; a completed mission starts
   the next item in the same workspace with distilled memory carried forward.
 - `EXTEND` file + `max_extensions` (default 3): a budget stop can be extended a

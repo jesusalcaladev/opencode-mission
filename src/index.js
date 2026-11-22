@@ -147,6 +147,13 @@ export default Plugin.define({
           execute: async (input, toolCtx) => ({ content: await supervisor.toolVerdict(toolCtx.sessionID, input) }),
         });
         editor.add({
+          name: "report",
+          description: "Store a stage report (investigator findings or reviewer SEVERITY findings). Read-only roles cannot write files but can report.",
+          input: obj({ role: str, text: str }, ["text"]),
+          options: { namespace: "mission", codemode: false },
+          execute: async (input, toolCtx) => ({ content: await supervisor.toolReport(toolCtx.sessionID, input) }),
+        });
+        editor.add({
           name: "heartbeat",
           description: "Renew the lease of your assigned task while you work, so it is not reclaimed as silent.",
           input: obj({ id: { type: "integer" } }),
