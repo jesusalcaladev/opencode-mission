@@ -14,19 +14,35 @@ import { createPlan } from "./planner.js";
 import { reportsText, wavesFor, workerBrief, workerPrompt } from "./team.js";
 import {
   STATUS,
+  TASK_STATUS,
   VERSION,
   appendJournal,
   applyTaskResults,
   buildBrief,
+  claim,
   decideNext,
+  distill,
   ensureMission,
+  expired,
+  fail,
+  fromTasks,
+  isLeased,
   loadCriteria,
+  loadMemory,
+  loadProgress,
   loadState,
+  loadSummary,
   loadTasks,
   nextStrategy,
   objectiveOf,
+  readJournal,
   readJournalTail,
+  release,
+  retryable,
+  saveMemory,
+  saveProgress,
   saveState,
+  saveSummary,
   saveTasks,
   selectTask,
   stopRequested,
@@ -152,7 +168,18 @@ export class Supervisor {
 
   async handleFailure(sessionID, error) {
     const root = this.rootFor(sessionID);
-    if (!root || this.workers.has(sessionID) || this.knownWorkers.has(sessionID)) return;
+    if (!root) return;
+    if (this.workers.has(sessionID) || this.knownWorkers.has(sessionID)) {
+      const progress = await loadProgress(root);
+      const worker = this.workers.get(sessionID);
+      const owned = progress.find((p) => p.owner === sessionID) ?? (worker ? progress.find((p) => p.id === worker.taskId) : null);
+      if (owned) {
+        fail(progress, owned.id, shortError(error), Date.now());
+        await saveProgress(root, progress);
+        await appendJournal(root, `worker failure on task #${owned.id}: ${shortError(error)} → lease released for retry`);
+      }
+      return;
+    }
     const state = await loadState(root);
     if (state.status !== STATUS.RUNNING || this.busy.has(sessionID)) return;
 
@@ -245,6 +272,10 @@ export class Supervisor {
     state.failures = 0;
     state.started_at = state.started_at || new Date().toISOString();
     state.last_prompt_at = Date.now();
+
+    const tasks0 = await loadTasks(root);
+    const progress0 = await loadProgress(root);
+    if (progress0.length === 0 && tasks0.length > 0) await saveProgress(root, fromTasks(tasks0));
 
     if (state.isolation === "worktree" && !state.worktree_root) {
       const wt = await createWorktree(root, String(state.id ?? "mission"));
@@ -341,7 +372,7 @@ export class Supervisor {
     return free;
   }
 
-  async writePlanFiles(root, plan, original) {
+  async writePlanFiles(root, plan, original, force = false) {
     const dir = path.join(root, ".mission");
     await mkdir(path.join(dir, "evidence"), { recursive: true });
     const s = plan.settings;
@@ -363,10 +394,11 @@ export class Supervisor {
     ].join("\n");
     await writeTextAtomic(path.join(dir, "mission.md"), `${frontmatter}\n`);
     await writeJsonAtomic(path.join(dir, "criteria.json"), { version: VERSION, checks: plan.checks });
-    await writeJsonAtomic(
-      path.join(dir, "tasks.json"),
-      { version: VERSION, tasks: plan.tasks.map((t) => ({ ...t, status: "pending" })) },
-    );
+    const planned = plan.tasks.map((t) => ({ ...t, status: "pending" }));
+    await writeJsonAtomic(path.join(dir, "tasks.json"), { version: VERSION, tasks: planned });
+    // progress.json may have been seeded by ensureMission from the placeholder
+    // task. Keep leases in sync with the actual plan.
+    await saveProgress(root, fromTasks(planned));
     const state = await loadState(root);
     Object.assign(state, s, {
       status: STATUS.RUNNING,
@@ -384,7 +416,7 @@ export class Supervisor {
       finished_at: null,
       finish_reason: null,
       task_reports: {},
-      dispatched_tasks: {},
+      worker_sessions: [],
     });
     await saveState(root, state);
   }
@@ -485,14 +517,26 @@ export class Supervisor {
   }
 
   async refreshBrief(sessionID, root, results) {
-    const [missionText, state, tasks, journal] = await Promise.all([
+    const [missionText, state, tasks, journal, memory, summary, progress] = await Promise.all([
       this.readMission(root),
       loadState(root),
       loadTasks(root),
-      readJournalTail(root),
+      readJournal(root),
+      loadMemory(root),
+      loadSummary(root),
+      loadProgress(root),
     ]);
-    if (!this.briefs) this.briefs = new Map();
-    this.briefs.set(sessionID, buildBrief({ root, missionText, state, tasks, journal, results }));
+    this.briefs.set(sessionID, buildBrief({ root, missionText, state, tasks, journal, memory, summary, progress, results }));
+  }
+
+  // Distill the raw journal into bounded memory. Called on a schedule, not on
+  // every turn, so the brief is stable and cacheable between compactions.
+  async compactMemory(root, state) {
+    if (state.turn === 0 || state.turn % 4 !== 0) return;
+    const [journal, memory, summary] = await Promise.all([readJournal(root), loadMemory(root), loadSummary(root)]);
+    const distilled = distill({ journal, memory, summary });
+    await Promise.all([saveMemory(root, distilled.memory), saveSummary(root, distilled.summary)]);
+    await appendJournal(root, `memory compacted: ${distilled.memory.split("\n").length} durable entries`);
   }
 
   async sessionCost(sessionID) {
@@ -561,9 +605,11 @@ export class Supervisor {
   // Parallel workers: one child session per ready task, grouped into waves of
   // disjoint file sets. The harness still owns verification and completion.
   async runWorkers(leadID, root, state, tasks, workRoot) {
-    const stored = await loadState(root);
-    const dispatched = stored.dispatched_tasks ?? {};
-    const open = tasks.filter((t) => t.status !== "completed" && !dispatched[String(t.id)]);
+    const now = Date.now();
+    const progress = await loadProgress(root);
+    const open = tasks.filter(
+      (t) => t.status !== TASK_STATUS.COMPLETED && retryable(progress, t.id) && !isLeased(progress, t.id, now),
+    );
     if (!open.length || !this.enableWorkers) return { ran: false };
     const waves = wavesFor(open, this.maxWorkers);
     if (!waves.length) return { ran: false };
@@ -603,10 +649,12 @@ export class Supervisor {
       );
       await this.serialize(root, async () => {
         const s = await loadState(root);
-        if (!s.dispatched_tasks || typeof s.dispatched_tasks !== "object") s.dispatched_tasks = {};
-        for (const w of spawned) s.dispatched_tasks[String(w.task.id)] = state.turn;
+        const leased = await loadProgress(root);
+        for (const w of spawned) {
+          claim(leased, w.task.id, w.id, Date.now());
+        }
         s.worker_sessions = [...new Set([...(s.worker_sessions ?? []), ...spawned.map((w) => w.id)])];
-        await saveState(root, s);
+        await Promise.all([saveProgress(root, leased), saveState(root, s)]);
       });
 
       const current = await loadTasks(root);
@@ -626,12 +674,23 @@ export class Supervisor {
       );
       await Promise.all(spawned.map((w) => this.waitWithTimeout(w.id, 120_000)));
 
+      const fresh = await loadState(root);
+      const leased = await loadProgress(root);
+      const taskList = await loadTasks(root);
       for (const w of spawned) {
+        const report = fresh.task_reports?.[String(w.task.id)];
+        if (report && report.status !== "failed") {
+          release(leased, w.task.id, TASK_STATUS.COMPLETED);
+        } else {
+          fail(leased, w.task.id, report?.summary ?? "no worker report", Date.now());
+          const t = taskList.find((x) => x.id === w.task.id);
+          if (t) t.status = retryable(leased, w.task.id) ? TASK_STATUS.PENDING : TASK_STATUS.FAILED;
+        }
         this.workers.delete(w.id);
         this.bySession.delete(w.id);
         this.briefs?.delete(w.id);
       }
-      const fresh = await loadState(root);
+      await Promise.all([saveProgress(root, leased), saveTasks(root, taskList)]);
       await appendJournal(root, reportsText(fresh.task_reports ?? {}));
     }
     return { ran };
@@ -655,6 +714,27 @@ export class Supervisor {
         return;
       }
 
+      let progress = await loadProgress(root);
+      if (progress.length === 0) {
+        const stored = await loadTasks(root);
+        if (stored.length > 0) {
+          progress = fromTasks(stored);
+          await saveProgress(root, progress);
+        }
+      }
+      const now = Date.now();
+      const overdue = expired(progress, now);
+      if (overdue.length > 0) {
+        for (const id of overdue) fail(progress, id, "lease expired", now);
+        const stored = await loadTasks(root);
+        for (const t of stored) {
+          if (overdue.includes(t.id)) t.status = retryable(progress, t.id) ? TASK_STATUS.PENDING : TASK_STATUS.FAILED;
+        }
+        await saveTasks(root, stored);
+        await saveProgress(root, progress);
+        await appendJournal(root, `leases expired: ${overdue.map((id) => `#${id}`).join(", ")} → reclaimed`);
+      }
+
       let { results, tasks } = await this.verify(root, workRoot);
       let anyProgress = this.recordTurn(state, results, tasks);
       const cost = await this.sessionCost(sessionID);
@@ -665,6 +745,7 @@ export class Supervisor {
       let decision = decideNext({ state, results, tasks, verdict, stopFile });
       await this.journalTurn(root, state, results, tasks, decision);
       await saveState(root, state);
+      await this.compactMemory(root, state);
 
       if (decision.type === "continue" && this.enableWorkers) {
         const outcome = await this.runWorkers(sessionID, root, state, tasks, workRoot);
@@ -850,19 +931,29 @@ export class Supervisor {
     const worker = this.workers.get(sessionID);
     const id = Number(input?.id ?? worker?.taskId);
     const summary = String(input?.summary ?? "").trim();
+    const rawStatus = String(input?.status ?? "done").toLowerCase();
+    const status = rawStatus === "failed" || rawStatus === "blocked" ? "failed" : "done";
+    const evidence = Array.isArray(input?.evidence) ? input.evidence.filter((e) => typeof e === "string").slice(0, 12) : [];
     if (!Number.isFinite(id) || id < 1) return "task id is required.";
     if (summary.length < 3) return "summary is required (at least 3 characters).";
     return this.serialize(root, async () => {
       const state = await loadState(root);
+      const progress = await loadProgress(root);
       if (!state.task_reports || typeof state.task_reports !== "object") state.task_reports = {};
       state.task_reports[String(id)] = {
+        status,
         summary: summary.slice(0, 1000),
+        evidence,
         at: new Date().toISOString(),
         by: worker?.taskId === id ? "worker" : "lead",
       };
-      await saveState(root, state);
-      await appendJournal(root, `task #${id} reported done: ${summary.slice(0, 200)} (harness verifies)`);
-      return `Report recorded for task #${id}. The lead verifies its check before marking it complete.`;
+      if (status === "done") release(progress, id, TASK_STATUS.COMPLETED);
+      else fail(progress, id, summary, Date.now());
+      await Promise.all([saveState(root, state), saveProgress(root, progress)]);
+      await appendJournal(root, `task #${id} reported ${status}: ${summary.slice(0, 200)} (harness verifies)`);
+      return status === "done"
+        ? `Report recorded for task #${id}; lease released. The harness still verifies its check.`
+        : `Failure recorded for task #${id}; lease released for retry.`;
     });
   }
 

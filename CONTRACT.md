@@ -23,7 +23,11 @@ nudged back to work. A mission that is genuinely impossible declares `blocked` w
 | `criteria.json` | **The** definition of done: `{version, checks:[{id, cmd, expect, timeout_ms}], review}` |
 | `tasks.json` | `{version, tasks:[{id, subject, status, blocked_by, verify}]}`. `verify` is the check id whose green state completes the task — the harness, not the model, marks it done |
 | `state.json` | Durable supervisor state: status, turn, cost, budget, last checks, strategy tier, last verdict, finish reason |
-| `journal.md` | Append-only memory read by every fresh context window |
+| `charter.md` | Immutable goal + acceptance criteria. Never rewritten by the supervisor |
+| `memory.md` | **Distilled** decisions, constraints, file map and discarded approaches, capped at ~4k characters. This is what the model sees |
+| `summary.md` | Regenerated short summary of `memory.md`, written on the compaction schedule |
+| `journal.md` | Raw append-only audit log; source material for distillation, not injected wholesale |
+| `progress.json` | Task leases: `{id, subject, status, owner, attempts, lease_until, last_error, verify}` |
 | `evidence/<check-id>.txt` | stdout, stderr, exit code and timing of each check run |
 | `STOP` | Kill switch. Presence stops the mission at the next idle boundary |
 
@@ -77,10 +81,13 @@ pre-authored `.mission/` directory unchanged.
 At mission start the supervisor dispatches one child session per ready task, grouped
 into waves of at most `maxWorkers` (default 3). Two tasks can share a wave only when
 their `files` lists are disjoint and their dependencies are already settled. The lead
-becomes a coordinator and does not duplicate worker work. Workers report with
-`mission_task_done(id, summary)`; the harness still runs the criteria itself and is
-the only writer of task completion and mission status. A task is dispatched at most
-once (`state.dispatched_tasks`), so a later idle cannot spawn duplicates.
+becomes a coordinator and does not duplicate **leased** work. Each task is claimed
+with a lease (`progress.json`): `claim → report → release`, or `expire → retry`.
+Workers report with `mission_task_done(id, status, summary, evidence)`; a `failed`
+report releases the lease for another attempt, and attempts are bounded (3). The
+harness still runs the criteria itself and is the only writer of task completion and
+mission status. A silent worker is reclaimable on the next idle — tasks are never
+"dispatched forever" as in v1.
 
 ## Liveness: failures and restarts
 
@@ -96,6 +103,16 @@ The session→mission registry lives in plugin storage. On plugin load, a missio
 is still `running`, whose session exists and is not busy, and whose last prompt is
 older than 30s is auto-resumed with `[MISSION RESUME]`. A reload in the middle of a
 turn cannot inject a second prompt.
+
+## Memory and context
+
+The journal is an audit log, not the model's memory. Every 4 turns the supervisor
+distills it into `memory.md` (decisions, blockers, discarded approaches, constraints)
+under a ~4k character budget and regenerates `summary.md`. The injected brief is
+rebuilt from disk on **every** model request and carries: distilled memory, summary,
+the current task, workers in flight, check results and a short journal tail. It is
+never reconstructed from conversation history, so compaction and session handoff
+cannot erase it.
 
 ## Context handoff
 

@@ -2,9 +2,18 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
-import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
 import { Supervisor } from "../src/supervisor.js";
-import { ensureMission, loadState, loadTasks, missionDir, writeTextAtomic } from "../src/mission.js";
+import {
+  ensureMission,
+  fileExists,
+  loadProgress,
+  loadState,
+  loadTasks,
+  missionDir,
+  saveProgress,
+  writeTextAtomic,
+} from "../src/mission.js";
 
 function fakeCtx({ onPrompt } = {}) {
   const prompts = [];
@@ -205,8 +214,77 @@ test("supervisor: auto-dispatch spawns workers at mission start", async () => {
     assert.equal(ctx.workerPrompts.length, 1);
     assert.match(ctx.workerPrompts[0].text, /MISSION WORKER/);
     assert.match(ctx.prompts[0], /MISSION COORDINATOR/);
-    const state = await loadState(root);
-    assert.deepEqual(Object.keys(state.dispatched_tasks ?? {}), ["1"]);
+    const progress = await loadProgress(root);
+    // The fake worker never called task_done, so its lease was released with an
+    // attempt recorded. That is exactly what lets the next idle reclaim it.
+    assert.equal(progress[0].attempts, 1);
+    assert.match(progress[0].last_error, /no worker report/);
+    assert.equal(progress[0].lease_until, 0);
+    sup.dispose();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("v2 migration: v1 missions gain progress, memory and charter", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "mission-v2-migrate-"));
+  try {
+    await mkdir(missionDir(root), { recursive: true });
+    await writeTextAtomic(path.join(missionDir(root), "mission.md"), "---\nid: old\n---\nOld mission.\n");
+    await writeTextAtomic(path.join(missionDir(root), "criteria.json"), JSON.stringify({ checks: [{ id: "x", cmd: "true" }] }));
+    await writeTextAtomic(
+      path.join(missionDir(root), "tasks.json"),
+      JSON.stringify({ tasks: [{ id: 1, subject: "old task", status: "in_progress", verify: "x", blocked_by: [] }] }),
+    );
+    await writeTextAtomic(path.join(missionDir(root), "state.json"), JSON.stringify({ status: "running", session_id: "lead" }));
+    await writeTextAtomic(path.join(missionDir(root), "journal.md"), "# Journal\n\n");
+
+    await ensureMission(root);
+    const progress = await loadProgress(root);
+    assert.equal(progress.length, 1);
+    assert.equal(progress[0].owner, "lead");
+    assert.equal(progress[0].lease_until, 0);
+    for (const file of ["memory.md", "summary.md", "charter.md", "progress.json"]) {
+      assert.equal(await fileExists(path.join(missionDir(root), file)), true, file);
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("memory: compaction distills decisions into memory.md", async () => {
+  const root = await fixture();
+  try {
+    const sup = new Supervisor(fakeCtx());
+    await writeTextAtomic(
+      path.join(missionDir(root), "journal.md"),
+      "# Journal\n\n[t1] decided to use leases instead of dispatched_tasks\n[t2] looked at the tree and did nothing\n",
+    );
+    await sup.compactMemory(root, { turn: 4 });
+    const memory = await readFile(path.join(missionDir(root), "memory.md"), "utf8");
+    assert.match(memory, /leases instead of dispatched_tasks/);
+    assert.doesNotMatch(memory, /looked at the tree/);
+    sup.dispose();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("lease: an expired worker lease is reclaimed on the next idle", async () => {
+  const root = await fixture();
+  try {
+    const ctx = fakeCtx();
+    const sup = new Supervisor(ctx);
+    await sup.start("ses_test", root);
+    await saveProgress(root, [
+      { id: 1, subject: "Create done.txt", status: "in_progress", owner: "dead_worker", attempts: 0, lease_until: Date.now() - 1000, last_error: "", verify: "done" },
+    ]);
+    await sup.handleIdle("ses_test");
+    const journal = await readFile(path.join(missionDir(root), "journal.md"), "utf8");
+    assert.match(journal, /leases expired: #1 → reclaimed/);
+    assert.ok(ctx.workerPrompts.length >= 1);
+    const progress = await loadProgress(root);
+    assert.ok(progress[0].attempts >= 1);
     sup.dispose();
   } finally {
     await rm(root, { recursive: true, force: true });

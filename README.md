@@ -20,6 +20,9 @@ out of the model and into the harness:
 The result is a long-running loop that survives failed requests, service restarts and
 context compaction, with parallel workers, git checkpoints and hard budgets.
 
+Version 0.2.0 adds **durable distilled memory** (decisions survive hundreds of turns)
+and **task leases** (a dead worker's task is reclaimed instead of stuck forever).
+
 ## Features
 
 - **Natural-language intake** — `/mission start build a CLI with three tests` creates
@@ -175,11 +178,15 @@ designed to be ported to other harnesses (a zode implementation is planned).
 
 ```text
 <workspace>/.mission/
-  mission.md        charter + frontmatter
+  charter.md        immutable goal + acceptance criteria
+  mission.md        frontmatter + objective
   criteria.json     the definition of done: [{id, cmd, expect, timeout_ms}]
   tasks.json        task graph: {id, subject, files, verify, blocked_by}
   state.json        durable supervisor state
-  journal.md        append-only memory for fresh contexts
+  journal.md        raw audit log (not injected wholesale)
+  memory.md         distilled decisions/constraints (~4k), injected into every request
+  summary.md        regenerated short memory summary
+  progress.json     task leases: owner, attempts, lease_until, last_error
   evidence/*.txt    stdout, stderr, exit code and timing per check
   STOP              kill switch, checked at every idle boundary
 ```

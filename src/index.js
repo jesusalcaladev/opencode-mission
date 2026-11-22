@@ -154,7 +154,15 @@ export default Plugin.define({
           name: "task_done",
           description:
             "Worker tool: report that your assigned task is finished. The lead still verifies the task's check before marking it complete.",
-          input: obj({ id: { type: "integer" }, summary: str }, ["summary"]),
+          input: obj(
+            {
+              id: { type: "integer" },
+              status: { type: "string", enum: ["done", "failed"] },
+              summary: str,
+              evidence: { type: "array", items: str },
+            },
+            ["summary"],
+          ),
           options: { namespace: "mission", codemode: false },
           execute: async (input, toolCtx) => ({ content: await supervisor.toolTaskDone(toolCtx.sessionID, input) }),
         });

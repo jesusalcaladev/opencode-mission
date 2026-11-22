@@ -6,6 +6,29 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-21
+
+### Added
+
+- Durable mission memory: `charter.md`, `memory.md`, `summary.md` and periodic
+  distillation of the raw journal into a bounded brief (~4k) regenerated from
+  disk on every model request. Decisions from turn 5 remain visible at turn 200.
+- Task leases in `progress.json` (`claim` / `renew` / `expire` / `retry`): a failed
+  or silent worker's task is reclaimed instead of being stuck `in_progress`.
+- Structured `mission_task_done(id, status, summary, evidence)`; worker failures
+  back off, rotate models and release the lease for retry.
+- Automatic v1 → v2 migration of existing missions: criteria, tasks and state are
+  preserved and new files are created in place.
+
+### Changed
+
+- Pure logic split into `src/mission/{state,decide,memory,lease}.js`;
+  `src/mission.js` is now a persistence facade that re-exports them.
+- The injected brief carries distilled memory, a summary, workers in flight and
+  a short journal tail instead of a raw 3000-character tail.
+
+[0.2.0]: https://github.com/jesusalcaladev/opencode-mission/releases/tag/v0.2.0
+
 ### Fixed
 
 - `mission_write` no longer accepts paths under `.mission/`; criteria, tasks and
