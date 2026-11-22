@@ -3,7 +3,7 @@
 
 export { default as path } from "node:path";
 
-export { mkdir, readFile, writeFile } from "node:fs/promises";
+export { mkdir, readFile, writeFile, rm } from "node:fs/promises";
 export { createHash } from "node:crypto";
 export { default as os } from "node:os";
 export * from "../mission.js";

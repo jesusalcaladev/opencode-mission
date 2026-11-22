@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   bar,
+  barParts,
   budgetColor,
   checkGlyph,
   duration,
@@ -19,6 +20,24 @@ test("format: bar is bounded and uses filled/empty glyphs", () => {
   assert.equal(bar(100, 4), "████");
   assert.equal(bar(150, 4), "████");
   assert.equal(bar(-10, 4), "░░░░");
+});
+
+test("format: barParts resolves sub-cells and stays bounded", () => {
+  assert.deepEqual(barParts(50, 4), { filled: 2, partial: "", empty: 2, pct: 50, width: 4 });
+  const half = barParts(37.5, 4);
+  assert.equal(half.filled, 1);
+  assert.equal(half.partial, "▌");
+  assert.equal(half.empty, 2);
+  assert.equal(bar(37.5, 4), "█▌░░");
+  assert.equal(barParts(100, 4).empty, 0);
+  assert.equal(barParts(-5, 4).filled, 0);
+  assert.equal(barParts(50, 500).width, 80);
+  // A remainder that rounds up to a full cell carries over instead of overflowing.
+  assert.deepEqual(barParts(99, 4), { filled: 4, partial: "", empty: 0, pct: 99, width: 4 });
+  assert.equal(barParts(50, undefined).width, 16);
+  assert.equal(barParts(50, "4").width, 4);
+  assert.equal(bar(50, 4, "=", "-"), "==--");
+  assert.equal(bar(0, 0).length, 16);
 });
 
 test("format: sparkline maps values to blocks", () => {

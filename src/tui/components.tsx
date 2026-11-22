@@ -1,7 +1,7 @@
 // @ts-nocheck — OpenTUI's published JSX types omit color props supported at runtime.
 // Mission Control common components + sidebar card.
 import { Show } from "solid-js";
-import { budgetColor, money, statusColor, statusGlyph, truncate } from "./format.js";
+import { barParts, budgetColor, money, statusColor, statusGlyph, truncate } from "./format.js";
 import { useColors, type MissionSnapshot } from "./types";
 
 // Compatibility re-export: older TUI module graphs import DashboardBody from here.
@@ -45,14 +45,15 @@ export function Stat(props: { label: string; value: string; color?: any }) {
 
 export function ProgressBar(props: { value: number; width?: number }) {
   const g = useColors();
-  const n = Math.round(Math.max(0, Math.min(100, Number(props.value) || 0)));
-  const width = Math.max(4, Number(props.width) || 16);
-  const filled = Math.round((n / 100) * width);
+  // Keep these as accessors: reading props once at component creation froze the
+  // bar at its first value. Expressions inside JSX stay reactive in Solid.
+  const parts = () => barParts(props.value, Math.max(4, Number(props.width) || 16));
+  const color = () => (parts().pct >= 100 ? g.success : g.accent);
   return (
     <text>
-      <span fg={g.accent}>{"█".repeat(filled)}</span>
-      <span fg={g.faint}>{"░".repeat(Math.max(0, width - filled))}</span>
-      <span fg={g.muted}> {n}%</span>
+      <span fg={color()}>{"█".repeat(parts().filled) + parts().partial}</span>
+      <span fg={g.faint}>{"░".repeat(parts().empty)}</span>
+      <span fg={g.muted}> {parts().pct}%</span>
     </text>
   );
 }
@@ -85,46 +86,43 @@ export function EmptyState() {
 
 export function SidebarCard(props: { snapshot: MissionSnapshot | null }) {
   const g = useColors();
-  const s = () => props.snapshot;
   return (
     <Section title="MISSION" minWidth={20}>
-      <Show when={s()} fallback={<EmptyState />}>
-        {() => {
-          const snap = s()!;
-          return (
-            <box flexDirection="column" gap={0}>
-              <StatusBadge status={snap.status} />
-              <text fg={g.muted}>{truncate(snap.objective, 34)}</text>
-              <ProgressBar value={snap.pct} width={18} />
-              <Stat
-                label="checks"
-                value={`${snap.checksGreen}/${snap.checksTotal}`}
-                color={
-                  snap.checksGreen === snap.checksTotal && snap.checksTotal > 0
-                    ? g.success
-                    : g.warning
-                }
-              />
-              <Stat label="tasks" value={`${snap.tasksDone}/${snap.tasksTotal}`} />
-              <Stat
-                label="agents"
-                value={String(snap.agents.length)}
-                color={snap.agents.length > 0 ? g.success : g.muted}
-              />
-              <Stat label="turn" value={`${snap.turn}/${snap.max_turns}`} />
-              <Stat
-                label="cost"
-                value={`${money(snap.cost_usd)}/${money(snap.budget_usd)}`}
-                color={budgetColor(g, snap.cost_usd, snap.budget_usd)}
-              />
-              <Show when={snap.nextTask}>
-                <text fg={g.faint}>
-                  next #{snap.nextTask!.id} {truncate(snap.nextTask!.subject, 24)}
-                </text>
-              </Show>
-            </box>
-          );
-        }}
+      {/* The accessor keeps every field live when the snapshot is replaced. */}
+      <Show when={props.snapshot} fallback={<EmptyState />}>
+        {(snap) => (
+          <box flexDirection="column" gap={0}>
+            <StatusBadge status={snap().status} />
+            <text fg={g.muted}>{truncate(snap().objective, 34)}</text>
+            <ProgressBar value={snap().pct} width={18} />
+            <Stat
+              label="checks"
+              value={`${snap().checksGreen}/${snap().checksTotal}`}
+              color={
+                snap().checksGreen === snap().checksTotal && snap().checksTotal > 0
+                  ? g.success
+                  : g.warning
+              }
+            />
+            <Stat label="tasks" value={`${snap().tasksDone}/${snap().tasksTotal}`} />
+            <Stat
+              label="agents"
+              value={String(snap().agents.length)}
+              color={snap().agents.length > 0 ? g.success : g.muted}
+            />
+            <Stat label="turn" value={`${snap().turn}/${snap().max_turns}`} />
+            <Stat
+              label="cost"
+              value={`${money(snap().cost_usd)}/${money(snap().budget_usd)}`}
+              color={budgetColor(g, snap().cost_usd, snap().budget_usd)}
+            />
+            <Show when={snap().nextTask}>
+              <text fg={g.faint}>
+                next #{snap().nextTask!.id} {truncate(snap().nextTask!.subject, 24)}
+              </text>
+            </Show>
+          </box>
+        )}
       </Show>
     </Section>
   );

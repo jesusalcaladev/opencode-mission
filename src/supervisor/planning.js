@@ -102,16 +102,32 @@ export const planning = {
     const root = path.join(base, `${slug}-${Date.now().toString(36)}`);
     await this.d.ensureMission(root, { objective: clean });
 
-    const generated = await this.d.createPlan(
-      clean,
-      root,
-      this.options.generate ?? (async () => ""),
-      {
-        model: await this.pickPlannerModel(),
+    let generated;
+    try {
+      const model = await this.pickPlannerModel();
+      generated = await this.d.createPlan(clean, root, this.options.generate ?? (async () => ""), {
+        model,
         attempts: 2,
-      }
-    );
-    await this.writePlanFiles(root, generated.plan, clean);
+      });
+    } catch (err) {
+      // A planner/model failure must never leave a half-authored mission:
+      // `.mission/` with only state.json renders as "(no objective)" and 0/0
+      // checks in the TUI. The fallback plan always has real criteria/tasks.
+      generated = {
+        plan: this.d.fallbackPlan(clean, root),
+        source: "fallback-after-error",
+        errors: [err instanceof Error ? err.message : String(err)],
+      };
+    }
+    try {
+      await this.writePlanFiles(root, generated.plan, clean);
+    } catch (err) {
+      // If even the minimal files cannot be written, remove the workspace we
+      // just created rather than leaving a broken folder behind.
+      await this.d.rm(root, { recursive: true, force: true }).catch(() => {});
+      const why = err instanceof Error ? err.message : String(err);
+      return `Could not create the mission (${why}). No partial workspace was left behind.`;
+    }
     const status = await this.start(sessionID, root, { objective: clean, autoDispatch: true });
     const waves = this.d.wavesFor(generated.plan.tasks, this.maxWorkers);
     return [

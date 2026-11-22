@@ -4,6 +4,32 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- `/mission-start <objective>` now accepts the objective inline. The TUI slash
+  command was registered without `slash.arguments`, so OpenCode discarded the
+  text after the command and always opened the dialog — which is why the server
+  form `/mission start ...` worked but the slash form did not. It now parses
+  the raw input (including the command token, the no-hyphen alias and the
+  server spelling) and only prompts when nothing was typed.
+- Mission Control no longer renders workspaces that are gone or half-authored.
+  `current.json` and `missions.json` are stale by design; `discoverRoots` and
+  `loadTuiModel` now verify a root has all four mission files before showing it,
+  so a deleted folder or a failed plan can no longer appear as
+  "(no objective) / 0 checks" with a path that does not exist.
+- A planner/model failure no longer leaves a `.mission/` with only `state.json`:
+  `planAndStart` falls back to a complete plan, and removes the just-created
+  workspace if even the minimal files cannot be written.
+- Mission Control is now scoped to the active session. The TUI used to show the
+  single global `current.json` mission in every terminal, so concurrent sessions
+  all displayed (and could stop/pause) the same mission. Each terminal now shows
+  only the mission bound to its own session; a session without a mission shows
+  the empty state. The sidebar and its progress bar are also reactive again:
+  the bar used to freeze at its first value and now advances with sub-cell
+  resolution as checks and tasks turn green.
+
 ## [0.4.0] - 2026-11-22
 
 ### Changed

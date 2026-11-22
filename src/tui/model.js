@@ -35,7 +35,7 @@ export async function readRegistry() {
   return Array.isArray(data) ? data.filter((e) => e && typeof e.root === "string") : [];
 }
 
-import { discoverRoots } from "./registry.js";
+import { discoverRoots, isMissionRoot } from "./registry.js";
 
 const ratio = (a, b) => (b > 0 ? a / b : 0);
 export function computeProgress(checks, tasks, requirements) {
@@ -236,12 +236,61 @@ export async function loadMission(root) {
   };
 }
 
-export async function loadTuiModel({ missionsRoot, maxMissions = 12 } = {}) {
+/**
+ * Choose the mission a terminal should display.
+ *
+ * The pointer and the registry are shared, process-global files: whichever
+ * mission was started last used to win everywhere. A session must instead see
+ * only its own mission. When a sessionID is supplied and that session has no
+ * mission we return null (the sidebar shows its empty state), never another
+ * terminal's work. The global pointer is consulted only when there is no
+ * active session at all, e.g. the dashboard opened from the home screen.
+ */
+export function selectSnapshot({ sessionID, pointer, registry = [], snapshots = [] } = {}) {
+  const full = snapshots.filter(Boolean);
+  const byRoot = new Map(full.map((s) => [path.resolve(s.root), s]));
+
+  if (sessionID) {
+    const owned = registry
+      .filter((e) => e && e.sessionID === sessionID && typeof e.root === "string")
+      .sort((a, b) => Number(b.updated_at || 0) - Number(a.updated_at || 0));
+    for (const entry of owned) {
+      const match = byRoot.get(path.resolve(entry.root));
+      if (match) return match;
+    }
+    // Older missions may predate the registry; their state still names the lead.
+    return full.find((s) => s.sessionID === sessionID) ?? null;
+  }
+
+  if (pointer?.root) {
+    const match = byRoot.get(path.resolve(pointer.root));
+    if (match) return match;
+  }
+  return full.find((s) => s.status === STATUS.RUNNING) ?? full[0] ?? null;
+}
+
+export async function loadTuiModel({ missionsRoot, maxMissions = 12, sessionID } = {}) {
   const pointer = await readPointer();
+  const registry = await readRegistry();
   const roots = await discoverRoots(missionsRoot, maxMissions);
-  const snapshots = await Promise.all(roots.map((root) => loadMission(root).catch(() => null)));
-  const missions = snapshots
-    .filter(Boolean)
+
+  // The active session's workspace must never be dropped by the discovery cap.
+  const ownRoots = sessionID
+    ? registry
+        .filter((e) => e && e.sessionID === sessionID && typeof e.root === "string")
+        .map((e) => path.resolve(e.root))
+    : [];
+  const allRoots = [...new Set([...roots, ...ownRoots])];
+
+  // Defense in depth: a workspace can be deleted between discovery and load.
+  // Never render a mission whose files are no longer on disk.
+  const snapshots = await Promise.all(
+    allRoots.map(async (root) =>
+      (await isMissionRoot(root)) ? loadMission(root).catch(() => null) : null
+    )
+  );
+  const full = snapshots.filter(Boolean);
+  const missions = full
     .map((s) => ({
       root: s.root,
       id: s.id,
@@ -255,9 +304,8 @@ export async function loadTuiModel({ missionsRoot, maxMissions = 12 } = {}) {
       const priority = (s) =>
         s.status === STATUS.RUNNING ? 2 : s.status === STATUS.PAUSED ? 1 : 0;
       return priority(b) - priority(a) || b.updatedAt - a.updatedAt;
-    });
-  const snapshot = pointer?.root
-    ? (snapshots.find((s) => s && s.root === pointer.root) ?? missions[0] ?? null)
-    : (missions.find((m) => m.status === STATUS.RUNNING) ?? missions[0] ?? null);
+    })
+    .slice(0, maxMissions);
+  const snapshot = selectSnapshot({ sessionID, pointer, registry, snapshots: full });
   return { snapshot, missions, updatedAt: Date.now() };
 }

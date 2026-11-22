@@ -8,10 +8,11 @@ import {
   loadMission,
   loadTuiModel,
   normalizeRequirements,
+  selectSnapshot,
 } from "../src/tui/model.js";
 
-async function fixture(overrides = {}) {
-  const root = await mkdtemp(path.join(os.tmpdir(), "mission-tui-"));
+async function fixture(overrides = {}, parent) {
+  const root = await mkdtemp(path.join(parent ?? os.tmpdir(), "mission-tui-"));
   const dir = path.join(root, ".mission");
   await mkdir(dir, { recursive: true });
   const state = {
@@ -120,6 +121,75 @@ test("tui model: loadMission returns a full snapshot", async () => {
     assert.match(s.journal, /decided to use ECS/);
   } finally {
     await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("tui model: selectSnapshot scopes by session before the global pointer", () => {
+  const a = { root: path.resolve("/tmp/a"), sessionID: "sess-a", status: "running" };
+  const b = { root: path.resolve("/tmp/b"), sessionID: "sess-b", status: "paused" };
+  const registry = [
+    { root: b.root, sessionID: "sess-b", updated_at: 2 },
+    { root: a.root, sessionID: "sess-a", updated_at: 1 },
+  ];
+  assert.equal(selectSnapshot({ sessionID: "sess-a", registry, snapshots: [a, b] }), a);
+  assert.equal(selectSnapshot({ sessionID: "sess-b", registry, snapshots: [a, b] }), b);
+  // A session with no mission never inherits someone else's mission.
+  assert.equal(selectSnapshot({ sessionID: "sess-c", registry, snapshots: [a, b] }), null);
+  // State still identifies the lead for missions predating the registry.
+  assert.equal(selectSnapshot({ sessionID: "sess-b", snapshots: [a, b] }), b);
+  // No active session (dashboard from home): pointer, then first running.
+  assert.equal(selectSnapshot({ pointer: { root: b.root }, snapshots: [a, b] }), b);
+  assert.equal(selectSnapshot({ snapshots: [a, b] }), a);
+  assert.equal(selectSnapshot({}), null);
+  // Stale pointers and registry entries fall through to the next source.
+  assert.equal(selectSnapshot({ pointer: { root: "/gone" }, snapshots: [a, b] }), a);
+  assert.equal(
+    selectSnapshot({
+      sessionID: "sess-a",
+      registry: [null, { root: "/gone", sessionID: "sess-a" }, { sessionID: "sess-a" }],
+      snapshots: [null, a, b],
+    }),
+    a
+  );
+  assert.equal(selectSnapshot({ snapshots: [b] }), b);
+  assert.equal(selectSnapshot({ snapshots: [] }), null);
+});
+
+test("tui model: concurrent terminals each show only their own mission", async () => {
+  const parent = await mkdtemp(path.join(os.tmpdir(), "mission-tui-multi-"));
+  const fakeHome = await mkdtemp(path.join(os.tmpdir(), "mission-tui-home-"));
+  const oldHome = process.env.HOME;
+  try {
+    const rootA = await fixture({ id: "mission-a", sessionID: "sess-a" }, parent);
+    const rootB = await fixture({ id: "mission-b", sessionID: "sess-b" }, parent);
+    process.env.HOME = fakeHome;
+    const cache = path.join(fakeHome, ".cache", "opencode-mission");
+    await mkdir(cache, { recursive: true });
+    await writeFile(path.join(cache, "current.json"), JSON.stringify({ root: rootA }));
+    await writeFile(
+      path.join(cache, "missions.json"),
+      JSON.stringify([
+        { root: rootA, sessionID: "sess-a", updated_at: 2 },
+        { root: rootB, sessionID: "sess-b", updated_at: 1 },
+      ])
+    );
+
+    const shared = { missionsRoot: parent };
+    const a = await loadTuiModel({ ...shared, sessionID: "sess-a" });
+    assert.equal(a.snapshot.root, rootA);
+    assert.equal(a.snapshot.id, "mission-a");
+    const b = await loadTuiModel({ ...shared, sessionID: "sess-b" });
+    assert.equal(b.snapshot.root, rootB);
+    assert.equal(b.snapshot.id, "mission-b");
+    const idle = await loadTuiModel({ ...shared, sessionID: "sess-c" });
+    assert.equal(idle.snapshot, null);
+    const global = await loadTuiModel(shared);
+    assert.equal(global.snapshot.root, rootA);
+  } finally {
+    if (oldHome === undefined) delete process.env.HOME;
+    else process.env.HOME = oldHome;
+    await rm(parent, { recursive: true, force: true });
+    await rm(fakeHome, { recursive: true, force: true });
   }
 });
 

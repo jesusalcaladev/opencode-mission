@@ -7,11 +7,41 @@ export function pct(value) {
   return Number.isFinite(n) ? Math.max(0, Math.min(100, Math.round(n))) : 0;
 }
 
+const FRACTIONS = ["▏", "▎", "▍", "▌", "▋", "▊", "▉"];
+
+/**
+ * Sub-cell progress geometry, shared by every bar renderer.
+ *
+ * Rounding to whole cells makes a wide bar jump in visible steps. Resolving the
+ * remainder into eighths of a block keeps it smooth without changing the
+ * terminal width, and the single source of truth keeps `bar()` and the React
+ * component in agreement.
+ */
+export function barParts(value, width = 16) {
+  const size = Math.max(1, Math.min(80, Math.floor(Number(width) || 16)));
+  const n = pct(value);
+  const exact = (n / 100) * size;
+  let filled = Math.floor(exact);
+  const eighths = Math.round((exact - filled) * 8);
+  let partial = "";
+  if (eighths >= 8) {
+    filled += 1;
+  } else if (eighths > 0) {
+    partial = FRACTIONS[eighths - 1];
+  }
+  filled = Math.min(size, filled);
+  return {
+    filled,
+    partial,
+    empty: Math.max(0, size - filled - (partial ? 1 : 0)),
+    pct: n,
+    width: size,
+  };
+}
+
 export function bar(value, width = 12, filled = "█", empty = "░") {
-  const size = Math.max(1, Math.min(80, Math.floor(width)));
-  const n = Math.round((pct(value) / 100) * size);
-  const clamped = Math.max(0, Math.min(size, n));
-  return filled.repeat(clamped) + empty.repeat(size - clamped);
+  const parts = barParts(value, width);
+  return filled.repeat(parts.filled) + parts.partial + empty.repeat(parts.empty);
 }
 
 export function sparkline(values, width = 16) {

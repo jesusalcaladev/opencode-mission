@@ -170,6 +170,10 @@ TUI commands (also in the command palette): `/mission-dashboard`,
 `/mission-panel`, `/mission-start`, `/mission-stop`, `/mission-pause`,
 `/mission-resume`, `/mission-open`. Default keybind: `ctrl+shift+m`.
 
+`/mission-start <objective>` takes the objective inline — no dialog. Typing it
+alone still opens the "New mission" prompt. `/missionstart` and `/mission-new`
+are aliases.
+
 | Tool                                              | Purpose                                                |
 | ------------------------------------------------- | ------------------------------------------------------ |
 | `mission_status`                                  | Read mission state                                     |

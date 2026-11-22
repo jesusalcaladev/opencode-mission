@@ -2,9 +2,9 @@
 // Exported as `./tui` so it loads beside the server part automatically.
 
 import { Plugin } from "@opencode/plugin/tui";
-import { Show } from "solid-js";
-import { onCleanup } from "solid-js";
+import { createEffect, onCleanup, Show } from "solid-js";
 import { loadTuiModel } from "./tui/model.js";
+import { parseStartInput } from "./tui/input.js";
 import { SidebarCard } from "./tui/components";
 import { MODEL_KEY, initialModel, type MissionModel } from "./tui/types";
 import { MissionDashboard, MissionPanel } from "./tui/dashboard";
@@ -18,13 +18,39 @@ export default Plugin.define({
     let timer: ReturnType<typeof setTimeout> | undefined;
     let stopped = false;
 
-    const refresh = async () => {
-      const next = await loadTuiModel({ missionsRoot: context.options?.missionsRoot });
+    // One TUI process owns many sessions. The route is the focused terminal;
+    // tabs are the fallback when a fullscreen plugin page covers the router.
+    const activeSession = (): string | undefined => {
+      const route = context.ui.router.current();
+      if (route.type === "session") return route.sessionID;
+      if (context.ui.tabs.enabled()) {
+        const active = context.ui.tabs.list().find((tab) => tab.active);
+        if (active) return active.sessionID;
+      }
+      return undefined;
+    };
+
+    let activeSessionID = activeSession();
+
+    const refresh = async (sessionID = activeSessionID) => {
+      const next = await loadTuiModel({
+        missionsRoot: context.options?.missionsRoot,
+        sessionID,
+      });
       setModel((draft) => {
         draft.snapshot = next.snapshot;
         draft.missions = next.missions;
         draft.updatedAt = next.updatedAt;
       });
+    };
+
+    // Commands must act on the mission of the terminal they were invoked from.
+    const scopedSnapshot = () => {
+      const snap = model.snapshot;
+      if (!snap) return null;
+      const sid = activeSession();
+      if (!sid) return snap;
+      return snap.sessionID === sid ? snap : null;
     };
 
     const schedule = () => {
@@ -38,6 +64,12 @@ export default Plugin.define({
     };
 
     void refresh().then(schedule);
+    createEffect(() => {
+      const sid = activeSession();
+      if (sid === activeSessionID) return;
+      activeSessionID = sid;
+      void refresh(sid);
+    });
     const eventStop = context.data.listen(() => void refresh());
 
     const location = context.location ?? context.data.location.default();
@@ -51,7 +83,7 @@ export default Plugin.define({
     };
 
     const missionCommand = async (text: string, sessionID?: string) => {
-      let sid = sessionID || model.snapshot?.sessionID;
+      let sid = sessionID || activeSession() || scopedSnapshot()?.sessionID;
       try {
         if (!sid) {
           const created = await context.client.session.create({
@@ -129,15 +161,31 @@ export default Plugin.define({
           title: "Start an autonomous mission",
           group: "Mission",
           palette: true,
-          slash: { name: "mission-start" },
-          run: async () => {
-            const objective = await context.ui.dialog.prompt({
-              title: "New mission",
-              description:
-                "Describe what must be done. The harness will verify it with executable criteria.",
-              placeholder: "build a complete 2D game engine with a headless smoke test",
-            });
-            if (objective?.trim()) await missionCommand(`start ${objective.trim()}`);
+          // `arguments: true` is what makes `/mission-start <objective>`
+          // deliver its text to run(). Without it OpenCode consumed the line
+          // and always opened the dialog — which is why `/mission start ...`
+          // (the server command) worked while the slash form did not.
+          slash: {
+            name: "mission-start",
+            aliases: ["missionstart", "mission-new"],
+            arguments: true,
+          },
+          run: async (input) => {
+            let objective = parseStartInput(input);
+            // Only prompt when no objective was typed: palette and keyboard
+            // dispatch have no input, and keep the original dialog flow.
+            if (!objective) {
+              objective =
+                (
+                  await context.ui.dialog.prompt({
+                    title: "New mission",
+                    description:
+                      "Describe what must be done. The harness will verify it with executable criteria.",
+                    placeholder: "build a complete 2D game engine with a headless smoke test",
+                  })
+                )?.trim() ?? "";
+            }
+            if (objective) await missionCommand(`start ${objective}`);
           },
         },
         {
@@ -147,20 +195,21 @@ export default Plugin.define({
           palette: true,
           slash: { name: "mission-stop" },
           run: async () => {
-            if (!model.snapshot) {
+            const snap = scopedSnapshot();
+            if (!snap) {
               context.ui.toast.show({
                 title: "Mission",
-                message: "No active mission",
+                message: "No active mission in this session",
                 variant: "warning",
               });
               return;
             }
             const ok = await context.ui.dialog.confirm({
               title: "Stop mission",
-              message: `Stop ${model.snapshot.id}? State is kept on disk.`,
+              message: `Stop ${snap.id}? State is kept on disk.`,
               label: { confirm: "Stop", cancel: "Cancel" },
             });
-            if (ok) await missionCommand("stop", model.snapshot.sessionID);
+            if (ok) await missionCommand("stop", snap.sessionID);
           },
         },
         {
@@ -170,8 +219,9 @@ export default Plugin.define({
           palette: true,
           slash: { name: "mission-pause" },
           run: async () => {
-            if (!model.snapshot) return;
-            await missionCommand("pause", model.snapshot.sessionID);
+            const snap = scopedSnapshot();
+            if (!snap) return;
+            await missionCommand("pause", snap.sessionID);
           },
         },
         {
@@ -181,8 +231,9 @@ export default Plugin.define({
           palette: true,
           slash: { name: "mission-resume" },
           run: async () => {
-            const root = model.snapshot?.root;
-            await missionCommand(root ? `resume ${root}` : "resume", model.snapshot?.sessionID);
+            const snap = scopedSnapshot();
+            const root = snap?.root;
+            await missionCommand(root ? `resume ${root}` : "resume", snap?.sessionID);
           },
         },
         {
@@ -192,7 +243,7 @@ export default Plugin.define({
           palette: true,
           slash: { name: "mission-open" },
           run: () => {
-            const sid = model.snapshot?.sessionID;
+            const sid = scopedSnapshot()?.sessionID;
             if (sid) navigate(sid);
           },
         },
