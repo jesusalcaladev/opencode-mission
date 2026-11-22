@@ -4,6 +4,7 @@
 export const VERSION = 2;
 export const STATUS = Object.freeze({
   RUNNING: "running",
+  PAUSED: "paused",
   COMPLETE: "complete",
   BLOCKED: "blocked",
   ABORTED: "aborted",
@@ -20,6 +21,15 @@ export const DEFAULT_MAX_TURNS = 12;
 export const DEFAULT_BUDGET_USD = 5;
 export const DEFAULT_STALL_AFTER_TURNS = 2;
 
+// Journal settings. The journal is append-only in the hot path; rotation keeps
+// long-running missions from growing it without bound.
+export const JOURNAL_HEADER = "# Journal\n\n";
+export const JOURNAL_MAX_LINE_CHARS = 2000;
+export const JOURNAL_MAX_BYTES = 512 * 1024;
+export const JOURNAL_KEEP_ARCHIVES = 3;
+export const JOURNAL_TAIL_CHARS = 4000;
+export const JOURNAL_MEMORY_CHARS = 12000;
+
 export const FILES = Object.freeze({
   dir: ".mission",
   charter: "charter.md",
@@ -35,7 +45,10 @@ export const FILES = Object.freeze({
   roadmap: "roadmap.md",
   extend: "EXTEND",
   stop: "STOP",
+  pause: "PAUSE",
   evidence: "evidence",
+  research: "research",
+  metrics: "metrics.json",
 });
 
 export const initialState = () => ({
@@ -45,6 +58,11 @@ export const initialState = () => ({
   cost_usd: 0,
   max_turns: DEFAULT_MAX_TURNS,
   budget_usd: DEFAULT_BUDGET_USD,
+  hard_budget_usd: 0,
+  auto_extend: false,
+  extension_turns: 8,
+  extension_budget_usd: 5,
+  extension_writes: 50,
   stall_after_turns: DEFAULT_STALL_AFTER_TURNS,
   best_green: 0,
   last_progress_turn: 0,
@@ -88,6 +106,19 @@ export const initialState = () => ({
   worktree_root: "",
   worktree_branch: "",
   history: [],
+  agent_runs: [],
+  prompt_ledger: [],
+  handoffs: [],
+  metrics: {},
+  last_checks_at: 0,
+  phase: "implement",
+  paused: false,
+  goal_audit: false,
+  max_goal_audits: 3,
+  goal_audits: 0,
+  worker_timeout_ms: 1800000,
+  needs_research: false,
+  research: false,
 });
 
 export function parseFrontmatter(text) {
@@ -105,10 +136,13 @@ export function parseFrontmatter(text) {
 }
 
 export function objectiveOf(missionText) {
-  return (missionText ?? "")
-    .replace(/^---[\s\S]*?---\r?\n/, "")
-    .split(/\r?\n/)
-    .find((line) => line.trim().length > 0)?.trim() ?? "(no objective)";
+  return (
+    (missionText ?? "")
+      .replace(/^---[\s\S]*?---\r?\n/, "")
+      .split(/\r?\n/)
+      .find((line) => line.trim().length > 0)
+      ?.trim() ?? "(no objective)"
+  );
 }
 
 export function normalizeTask(task, index = 0) {
@@ -116,7 +150,9 @@ export function normalizeTask(task, index = 0) {
   const blocked = Array.isArray(task?.blocked_by)
     ? task.blocked_by.filter((n) => Number.isInteger(Number(n)) && Number(n) > 0)
     : [];
-  const status = ["pending", "in_progress", "completed", "failed"].includes(task?.status) ? task.status : TASK_STATUS.PENDING;
+  const status = ["pending", "in_progress", "completed", "failed"].includes(task?.status)
+    ? task.status
+    : TASK_STATUS.PENDING;
   return {
     id: Number.isFinite(Number(task?.id)) && Number(task.id) > 0 ? Number(task.id) : index + 1,
     subject: String(task?.subject ?? `Task ${index + 1}`).slice(0, 160),

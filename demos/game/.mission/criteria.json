@@ -1,0 +1,71 @@
+{
+  "version": 2,
+  "checks": [
+    {
+      "id": "build",
+      "cmd": "node --check engine.js && node --check ecs.js",
+      "expect": "exit0",
+      "timeout_ms": 30000,
+      "kind": "build"
+    },
+    {
+      "id": "loop",
+      "cmd": "node -e \"import('./engine.js').then(m=>{const e=m.createEngine(); e.step(1/60); if(e.state.frame!==1) process.exit(1); e.step(1/60); if(e.state.frame!==2) process.exit(2); console.log('frames ok')})\"",
+      "expect": "contains:frames ok",
+      "timeout_ms": 30000,
+      "kind": "unit"
+    },
+    {
+      "id": "determinism",
+      "cmd": "node -e \"import('./engine.js').then(m=>{const a=m.createEngine(); const b=m.createEngine(); for(let i=0;i<30;i++){a.step(1/60);b.step(1/60)} if(JSON.stringify(a.state)!==JSON.stringify(b.state)) process.exit(1); console.log('deterministic')})\"",
+      "expect": "contains:deterministic",
+      "timeout_ms": 30000,
+      "kind": "unit"
+    },
+    {
+      "id": "ecs",
+      "cmd": "node -e \"import('./ecs.js').then(m=>{const w=m.createWorld(); const id=w.add({x:1,y:2}); if(w.get(id).x!==1) process.exit(1); w.remove(id); if(w.get(id)) process.exit(2); console.log('ecs ok')})\"",
+      "expect": "contains:ecs ok",
+      "timeout_ms": 30000,
+      "kind": "unit"
+    },
+    {
+      "id": "collision",
+      "cmd": "node -e \"import('./physics.js').then(m=>{if(!m.aabb({x:0,y:0,w:2,h:2},{x:1,y:1,w:2,h:2}))process.exit(1); if(m.aabb({x:0,y:0,w:1,h:1},{x:5,y:5,w:1,h:1}))process.exit(2); console.log('collision ok')})\"",
+      "expect": "contains:collision ok",
+      "timeout_ms": 30000,
+      "kind": "unit"
+    },
+    {
+      "id": "assets",
+      "cmd": "node -e \"const a=require('./assets/sprites.json'); if(!a.player||!a.player.path)process.exit(1); console.log('assets ok')\"",
+      "expect": "contains:assets ok",
+      "timeout_ms": 30000,
+      "kind": "integration"
+    },
+    {
+      "id": "smoke",
+      "cmd": "node demo.js",
+      "expect": "contains:FRAME",
+      "timeout_ms": 60000,
+      "kind": "e2e"
+    }
+  ],
+  "requirements": [
+    {
+      "id": "r-loop",
+      "text": "Fixed-step loop advances frames deterministically",
+      "checks": ["loop", "determinism"]
+    },
+    { "id": "r-ecs", "text": "Entities can be created and destroyed", "checks": ["ecs"] },
+    { "id": "r-physics", "text": "AABB collision detects overlap", "checks": ["collision"] },
+    { "id": "r-assets", "text": "Sprite manifest loads", "checks": ["assets"] },
+    { "id": "r-e2e", "text": "Headless demo renders a frame", "checks": ["smoke"] }
+  ],
+  "milestones": [
+    { "id": "core", "title": "Core loop and ECS" },
+    { "id": "gameplay", "title": "Physics and assets" },
+    { "id": "demo", "title": "Headless demo" }
+  ],
+  "definition_of_done": ["All checks green", "All requirements covered", "Goal audit finds no gaps"]
+}

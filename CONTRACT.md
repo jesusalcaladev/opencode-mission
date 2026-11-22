@@ -17,19 +17,19 @@ nudged back to work. A mission that is genuinely impossible declares `blocked` w
 
 `<workspace>/.mission/`
 
-| File | Purpose |
-| --- | --- |
-| `mission.md` | Frontmatter (`id`, `max_turns`, `budget_usd`, `stall_after_turns`) + objective and non-goals |
-| `criteria.json` | **The** definition of done: `{version, checks:[{id, cmd, expect, timeout_ms}], review}` |
-| `tasks.json` | `{version, tasks:[{id, subject, status, blocked_by, verify}]}`. `verify` is the check id whose green state completes the task — the harness, not the model, marks it done |
-| `state.json` | Durable supervisor state: status, turn, cost, budget, last checks, strategy tier, last verdict, finish reason |
-| `charter.md` | Immutable goal + acceptance criteria. Never rewritten by the supervisor |
-| `memory.md` | **Distilled** decisions, constraints, file map and discarded approaches, capped at ~4k characters. This is what the model sees |
-| `summary.md` | Regenerated short summary of `memory.md`, written on the compaction schedule |
-| `journal.md` | Raw append-only audit log; source material for distillation, not injected wholesale |
-| `progress.json` | Task leases: `{id, subject, status, owner, attempts, lease_until, last_error, verify}` |
-| `evidence/<check-id>.txt` | stdout, stderr, exit code and timing of each check run |
-| `STOP` | Kill switch. Presence stops the mission at the next idle boundary |
+| File                      | Purpose                                                                                                                                                                   |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mission.md`              | Frontmatter (`id`, `max_turns`, `budget_usd`, `stall_after_turns`) + objective and non-goals                                                                              |
+| `criteria.json`           | **The** definition of done: `{version, checks:[{id, cmd, expect, timeout_ms}], review}`                                                                                   |
+| `tasks.json`              | `{version, tasks:[{id, subject, status, blocked_by, verify}]}`. `verify` is the check id whose green state completes the task — the harness, not the model, marks it done |
+| `state.json`              | Durable supervisor state: status, turn, cost, budget, last checks, strategy tier, last verdict, finish reason                                                             |
+| `charter.md`              | Immutable goal + acceptance criteria. Never rewritten by the supervisor                                                                                                   |
+| `memory.md`               | **Distilled** decisions, constraints, file map and discarded approaches, capped at ~4k characters. This is what the model sees                                            |
+| `summary.md`              | Regenerated short summary of `memory.md`, written on the compaction schedule                                                                                              |
+| `journal.md`              | Raw append-only audit log; source material for distillation, not injected wholesale                                                                                       |
+| `progress.json`           | Task leases: `{id, subject, status, owner, attempts, lease_until, last_error, verify}`                                                                                    |
+| `evidence/<check-id>.txt` | stdout, stderr, exit code and timing of each check run                                                                                                                    |
+| `STOP`                    | Kill switch. Presence stops the mission at the next idle boundary                                                                                                         |
 
 `expect` is `exit0` (default) or `contains:<text>` (requires exit 0 **and** the substring
 in stdout).
@@ -81,12 +81,12 @@ pre-authored `.mission/` directory unchanged.
 All agents share the same working tree; no worktrees are created. What separates
 them is **permission and stage**, not a checkout:
 
-| Role | Writes | Job |
-| --- | --- | --- |
-| Investigator | no | read the code, report findings via `mission_report` |
-| Implementer | only its task's `files` | do the assigned task |
-| Tester | no | run checks, report results |
-| Reviewer | no | review the diff, emit `SEVERITY: high|medium|low` lines |
+| Role         | Writes                  | Job                                                 |
+| ------------ | ----------------------- | --------------------------------------------------- |
+| Investigator | no                      | read the code, report findings via `mission_report` |
+| Implementer  | only its task's `files` | do the assigned task                                |
+| Tester       | no                      | run checks, report results                          |
+| Reviewer     | no                      | review the diff, emit `SEVERITY: high               | medium | low` lines |
 
 The harness owns the stage machine `investigate → implement → verify → review →
 done`. An agent cannot skip a stage. Completion requires a clean review; a high
@@ -145,6 +145,35 @@ The loop stops when two consecutive audits find nothing above `min_impact`
 `STOP`. The final `finish_reason` says why. `continuous_improvement: false` is
 the opt-out for deterministic runs.
 
+## Campaign mode and definition of done
+
+A campaign plan may declare up to 60 tasks, 24 checks, `milestones`, a
+`definition_of_done` and a `requirements` list. Every requirement names at least
+one check id. Completion is legal only when **all checks are green, all tasks are
+verified and every requirement is covered by a green check**. A goal auditor can
+add tasks (and e2e checks) for uncovered requirements in bounded rounds; an
+unresolved gap stops with `goal-gaps` instead of reporting a false success.
+
+Re-planning is monotonic: it may add checks/tasks but may not drop a green check,
+weaken its command/expectation, or drop a completed task. This prevents a stalled
+mission from "succeeding" by shrinking the contract.
+
+Soft budgets (`max_turns`, `max_writes`, `budget_usd`) are windows in campaign
+mode. On a soft stop, the harness extends them automatically if verified progress
+happened recently. `hard_budget_usd`, `max_wallclock_min`, `STOP`, `PAUSE`,
+`blocked`, `hard-budget` and `test-erosion` are absolute. Campaign defaults are
+40 turns/window, 8h wall-clock, $25 hard cap and 50 extensions.
+
+## Research mode
+
+Research tools are opt-in (`/mission research` or a plan with `needs_research`).
+The plugin registers a DuckDuckGo websearch provider with OpenCode and exposes
+`mission_web_search`, `mission_web_fetch`, `mission_image_search`,
+`mission_image_generate`, `mission_research` and `mission_research_note`. Fetch
+and download refuse non-http schemes and private/loopback addresses, cap sizes
+and timeouts, and record attribution/license for every image. Reports are written
+to `research/report.md` with `sources.json` and `images/`.
+
 ## Continuity across hours
 
 A mission may declare a `roadmap.md` checklist. On `complete`, the harness ticks
@@ -169,6 +198,13 @@ rebuilt from disk on **every** model request and carries: distilled memory, summ
 the current task, workers in flight, check results and a short journal tail. It is
 never reconstructed from conversation history, so compaction and session handoff
 cannot erase it.
+
+The journal is append-only in the hot path: writes are queued per file, each line
+is capped at 2,000 characters and `readJournalTail()` reads only the requested
+window instead of the whole file. When the active file exceeds 512 KB it rotates
+to `journal.<timestamp>.md`, leaves a pointer line, and keeps the last 3 archives.
+Set `MISSION_JOURNAL_MAX_BYTES` to change the threshold and `MISSION_JOURNAL_FSYNC=1`
+to fsync every line.
 
 ## Context handoff
 

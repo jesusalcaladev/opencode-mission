@@ -4,6 +4,87 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-11-22
+
+### Changed
+
+- **Architecture cleanup:** every supervisor mixin now reaches dependencies through
+  `this.d` instead of a 40-name destructure. All source files are ≤ 250 lines.
+- Split large modules into focused files: supervisor decisions/models/registry/
+  planning/roles-pipeline/goal-audit/improvements/scheduler/research-tools,
+  mission persistence/bootstrap/journal, planner prompt/normalize/plan, research
+  text/search/images/report, and TUI components/lists/dashboard-parts/types.
+- Mission Control now renders only the sidebar HUD; the composer and footer HUDs
+  were removed. The dashboard and panel remain on demand.
+
+### Added
+
+- Tooling: ESLint 9, Prettier 3 and TypeScript (TUI only) as devDependencies, plus
+  `npm run lint`, `format`, `format:check`, `typecheck`, `coverage` and `quality`.
+- Coverage gates: ≥85% lines, ≥65% branches, ≥80% functions; 140 tests pass.
+- `scripts/check-syntax.mjs` checks all JS/MJS files recursively.
+- CONTRIBUTING and ARCHITECTURE updated with the new rules and module map.
+
+## [0.3.1] - 2026-11-22
+
+### Changed
+
+- Mission Control now renders a **single** persistent surface: the sidebar card.
+  The composer HUD and the home/prompt footer badges were removed; the dashboard
+  and panel remain available on demand via `ctrl+shift+m`.
+
+### Added
+
+- Recovery hardening: deduplicated prompt ledger (`prompt_ledger`) for start,
+  nudge, rescue, auto-resume and backoff prompts; handoff lineage (`handoffs`);
+  stale-worker lease recovery on plugin load; registry pruning.
+- Telemetry: `state.metrics` mirrored to `.mission/metrics.json` with counters for
+  turns, checks, tasks, agents, recoveries, extensions, handoffs, replans,
+  splits, improvements, writes, research calls and goal audits. The dashboard has
+  a TELEMETRY panel.
+- Dynamic task splitting: a task with two failed attempts is decomposed into 2–5
+  verifiable subtasks by the planner instead of being retried blindly.
+- Research cache (24h) and Serper/Tavily providers in addition to DuckDuckGo/Brave.
+
+## [0.3.0] - 2026-11-22
+
+### Added
+
+- **Mission Control TUI**: live HUD in `session.composer.top`, sidebar card,
+  home/prompt footer badges, a session panel and a full-screen dashboard with
+  checks, tasks, agents, requirements, budget, sparkline and journal tail.
+  Empty sessions now show an explicit CTA. `ctrl+shift+m` opens the dashboard;
+  commands exist for start/stop/pause/resume/open.
+- **Campaign Mode**: plans up to 60 tasks / 24 checks with explicit requirements,
+  milestones and a definition of done. Soft budgets auto-extend while verified
+  progress continues, bounded by `hard_budget_usd` and `max_wallclock_min`.
+  `PAUSE` pauses cleanly at the next idle boundary.
+- **Goal audit**: before completion an independent auditor checks the objective
+  against requirements and evidence. `GAP:` lines become tasks (and, when safe,
+  new e2e checks) in bounded rounds; completion is impossible with uncovered
+  requirements.
+- **Monotonic re-planning**: a re-plan cannot drop a green check or a completed
+  task; completed work is preserved and new work is appended.
+- **Continuous worker pool**: workers run for their lease/heartbeat instead of a
+  120 s timeout, the next ready task starts as soon as one finishes, and lead
+  ticks are scheduled from worker completion events.
+- **Parallel roles**: investigator + researcher and two reviewers now run in
+  parallel; a new Integrator role fixes cross-module issues before review.
+- **Research Mode**: `DuckDuckGo` websearch provider registered with OpenCode,
+  Brave/Serper-ready, plus `mission_web_search`, `mission_web_fetch` (SSRF
+  guard), `mission_image_search` (Openverse/Wikimedia), `mission_image_generate`,
+  `mission_research` and `mission_research_note`. `/mission research <question>`
+  creates a verified research mission.
+- Telemetry: `state.history`, `state.agent_runs`, `last_checks_at`, `phase` and a
+  global mission registry for the TUI.
+
+### Changed
+
+- Planner now emits `kind`, `retries`, requirements and campaign settings; checks
+  may run up to 10 minutes and retry flaky failures.
+- Role stages in campaign mode: `investigate → implement → integrate → verify →
+review → goal-audit → improve`.
+
 ## [Unreleased]
 
 ### Added

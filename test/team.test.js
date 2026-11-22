@@ -9,7 +9,10 @@ test("wavesFor parallelizes disjoint tasks up to maxWorkers", () => {
     { id: 3, subject: "c", files: ["c.js"] },
   ];
   const waves = wavesFor(tasks, 2);
-  assert.deepEqual(waves.map((w) => w.map((t) => t.id)), [[1, 2], [3]]);
+  assert.deepEqual(
+    waves.map((w) => w.map((t) => t.id)),
+    [[1, 2], [3]]
+  );
 });
 
 test("wavesFor respects dependencies and file conflicts", () => {
@@ -19,7 +22,10 @@ test("wavesFor respects dependencies and file conflicts", () => {
     { id: 3, subject: "c", files: ["c.js"], blocked_by: [1] },
   ];
   const waves = wavesFor(tasks, 3);
-  assert.deepEqual(waves.map((w) => w.map((t) => t.id)), [[1], [2, 3]]);
+  assert.deepEqual(
+    waves.map((w) => w.map((t) => t.id)),
+    [[1], [2, 3]]
+  );
 });
 
 test("wavesFor tolerates tasks without a files field", () => {

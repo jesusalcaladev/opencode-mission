@@ -6,13 +6,23 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { runCommand } from "./checks.js";
 
-const SKIP_DIRS = new Set(["node_modules", ".git", ".mission", ".cache", "dist", "build", "zig-cache", ".zig-cache"]);
+const SKIP_DIRS = new Set([
+  "node_modules",
+  ".git",
+  ".mission",
+  ".cache",
+  "dist",
+  "build",
+  "zig-cache",
+  ".zig-cache",
+]);
 
 function isTestFile(rel) {
   const name = path.basename(rel);
   if (/\.(test|spec)\.[cm]?[jt]sx?$/.test(name)) return true;
   if (/^test_.*\.py$/.test(name)) return true;
-  if (/(^|\/)(tests?|specs?)\//.test(rel) && /\.[cm]?[jt]sx?$|\.py$|\.rs$|\.go$/.test(name)) return true;
+  if (/(^|\/)(tests?|specs?)\//.test(rel) && /\.[cm]?[jt]sx?$|\.py$|\.rs$|\.go$/.test(name))
+    return true;
   return false;
 }
 
@@ -30,7 +40,10 @@ async function walk(root, dir, out) {
       await walk(root, full, out);
     } else if (entry.isFile() && isTestFile(path.relative(root, full).split(path.sep).join("/"))) {
       const data = await readFile(full);
-      out.set(path.relative(root, full).split(path.sep).join("/"), createHash("sha256").update(data).digest("hex"));
+      out.set(
+        path.relative(root, full).split(path.sep).join("/"),
+        createHash("sha256").update(data).digest("hex")
+      );
     }
   }
 }
@@ -52,7 +65,9 @@ export async function checkTestIntegrity(root, baseline) {
     else if (current[file] !== hash) damaged.push(`modified ${file}`);
   }
   if (current && Object.keys(current).length < Object.keys(baseline).length) {
-    damaged.push(`test file count dropped from ${Object.keys(baseline).length} to ${Object.keys(current).length}`);
+    damaged.push(
+      `test file count dropped from ${Object.keys(baseline).length} to ${Object.keys(current).length}`
+    );
   }
   return { ok: damaged.length === 0, current, reason: damaged.join("; ") };
 }
@@ -72,8 +87,13 @@ export async function gitCommit(root, message, paths = []) {
   if (paths.length === 0) return { ok: false, reason: "no mission-owned paths to commit" };
   const quoted = paths.map((p) => `'${String(p).replace(/'/g, "'\\''")}'`).join(" ");
   const add = await runCommand(`git add -- ${quoted}`, root, 15000);
-  if (add.code !== 0) return { ok: false, reason: `git add failed: ${add.stderr.trim().slice(0, 200)}` };
-  const commit = await runCommand(`git commit --no-gpg-sign -m ${JSON.stringify(message)}`, root, 30000);
+  if (add.code !== 0)
+    return { ok: false, reason: `git add failed: ${add.stderr.trim().slice(0, 200)}` };
+  const commit = await runCommand(
+    `git commit --no-gpg-sign -m ${JSON.stringify(message)}`,
+    root,
+    30000
+  );
   const text = `${commit.stdout}\n${commit.stderr}`;
   if (commit.code !== 0) {
     if (text.includes("nothing to commit")) return { ok: true, sha: null, reason: "no changes" };
@@ -108,7 +128,11 @@ export async function createWorktree(root, id) {
   const suffix = createHash("sha256").update(root).digest("hex").slice(0, 8);
   const target = path.join(parent, `.mission-worktree-${cleanId}-${suffix}`);
   const branch = `mission/${cleanId}`;
-  const result = await runCommand(`git -C ${JSON.stringify(root)} worktree add -B ${JSON.stringify(branch)} ${JSON.stringify(target)} HEAD`, parent, 30000);
+  const result = await runCommand(
+    `git -C ${JSON.stringify(root)} worktree add -B ${JSON.stringify(branch)} ${JSON.stringify(target)} HEAD`,
+    parent,
+    30000
+  );
   if (result.code !== 0) return { ok: false, reason: `${result.stderr.trim().slice(0, 200)}` };
   return { ok: true, root: target, branch };
 }

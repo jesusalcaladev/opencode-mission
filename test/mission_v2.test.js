@@ -1,10 +1,26 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { STATUS, TASK_STATUS, parseFrontmatter, objectiveOf, normalizeTask } from "../src/mission/state.js";
+import {
+  STATUS,
+  TASK_STATUS,
+  parseFrontmatter,
+  objectiveOf,
+  normalizeTask,
+} from "../src/mission/state.js";
 import { decideNext, applyTaskResults } from "../src/mission/decide.js";
 import { distill, buildBrief } from "../src/mission/memory.js";
-import { fromTasks, migrateV1, claim, release, renew, fail, expired, retryable, MAX_ATTEMPTS } from "../src/mission/lease.js";
+import {
+  fromTasks,
+  migrateV1,
+  claim,
+  release,
+  renew,
+  fail,
+  expired,
+  retryable,
+  MAX_ATTEMPTS,
+} from "../src/mission/lease.js";
 import { normalizePlan } from "../src/planner.js";
 import { needsReplan, afterReplan, replanPrompt, STALL_TURNS } from "../src/mission/watchdog.js";
 
@@ -17,7 +33,13 @@ test("state: frontmatter numbers and objective extraction", () => {
 });
 
 test("state: normalizeTask keeps ids and drops malformed dependencies", () => {
-  const t = normalizeTask({ id: 3, subject: "work", status: "weird", files: ["a.js", 7], blocked_by: [1, "x", -2] });
+  const t = normalizeTask({
+    id: 3,
+    subject: "work",
+    status: "weird",
+    files: ["a.js", 7],
+    blocked_by: [1, "x", -2],
+  });
   assert.equal(t.id, 3);
   assert.equal(t.status, TASK_STATUS.PENDING);
   assert.equal(t.files.length, 1);
@@ -29,7 +51,10 @@ test("decide: stop file and blocked verdict beat completion", () => {
   const results = [{ id: "x", ok: true }];
   const tasks = [{ id: 1, status: TASK_STATUS.COMPLETED }];
   assert.equal(decideNext({ state, results, tasks, stopFile: true }).reason, "stop-file");
-  assert.equal(decideNext({ state, results, tasks, verdict: { status: "blocked", unblock: "key" } }).reason, "blocked");
+  assert.equal(
+    decideNext({ state, results, tasks, verdict: { status: "blocked", unblock: "key" } }).reason,
+    "blocked"
+  );
   assert.equal(decideNext({ state, results, tasks }).type, "complete");
 });
 
@@ -38,7 +63,10 @@ test("decide: applyTaskResults settles dependency chains", () => {
     { id: 1, subject: "a", status: TASK_STATUS.PENDING, verify: "a", blocked_by: [] },
     { id: 2, subject: "b", status: TASK_STATUS.PENDING, verify: "b", blocked_by: [1] },
   ];
-  const out = applyTaskResults(tasks, [{ id: "a", ok: true }, { id: "b", ok: true }]);
+  const out = applyTaskResults(tasks, [
+    { id: "a", ok: true },
+    { id: "b", ok: true },
+  ]);
   assert.equal(out.tasks[1].status, TASK_STATUS.COMPLETED);
   assert.equal(out.changed, true);
 });
@@ -146,19 +174,36 @@ test("watchdog: a stalled tier-2 mission requests a real re-plan", () => {
   assert.equal(needsReplan(reset), false);
   const early = { strategy_tier: 2, turn: 6, last_progress_turn: 5, last_replan_turn: 0 };
   assert.equal(needsReplan(early), false);
-  const prompt = replanPrompt({ objective: "Ship it", results: [{ id: "x", ok: false, summary: "exit 1" }], tasks: [] });
+  const prompt = replanPrompt({
+    objective: "Ship it",
+    results: [{ id: "x", ok: false, summary: "exit 1" }],
+    tasks: [],
+  });
   assert.match(prompt, /COMPLETELY NEW/);
   assert.match(prompt, /exit 1/);
   assert.ok(STALL_TURNS >= 1);
 });
 
 test("decide: write ceiling stops a runaway agent", () => {
-  const state = { status: STATUS.RUNNING, turn: 2, max_turns: 20, cost_usd: 0, budget_usd: 5, writes: 50, max_writes: 50 };
-  assert.equal(decideNext({ state, results: [{ id: "x", ok: true }], tasks: [] }).reason, "write-ceiling");
+  const state = {
+    status: STATUS.RUNNING,
+    turn: 2,
+    max_turns: 20,
+    cost_usd: 0,
+    budget_usd: 5,
+    writes: 50,
+    max_writes: 50,
+  };
+  assert.equal(
+    decideNext({ state, results: [{ id: "x", ok: true }], tasks: [] }).reason,
+    "write-ceiling"
+  );
 });
 
 test("lease: v1 migration makes in_progress tasks reclaimable", () => {
-  const progress = migrateV1([{ id: 1, subject: "a", status: TASK_STATUS.IN_PROGRESS }], { session_id: "lead" });
+  const progress = migrateV1([{ id: 1, subject: "a", status: TASK_STATUS.IN_PROGRESS }], {
+    session_id: "lead",
+  });
   assert.equal(progress[0].lease_until, 0);
   assert.equal(progress[0].owner, "lead");
 });

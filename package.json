@@ -1,6 +1,6 @@
 {
   "name": "opencode-mission",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "description": "Autonomous mission supervisor for OpenCode: plans work, dispatches parallel sub-agents, and verifies executable criteria until the task is actually done.",
@@ -45,9 +45,26 @@
     "@opentui/solid": ">=0.6.6",
     "solid-js": ">=1.9.0"
   },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "@opencode/theme": "2.3.2",
+    "@opentui/core": "0.8.4",
+    "@opentui/solid": "0.8.4",
+    "eslint": "^9.17.0",
+    "globals": "^15.14.0",
+    "prettier": "^3.4.2",
+    "solid-js": "^1.9.4",
+    "typescript": "^5.7.2"
+  },
   "scripts": {
-    "check": "for f in src/*.js src/mission/*.js src/supervisor/*.js test/*.test.js; do node --check \"$f\" || exit 1; done",
+    "check": "node scripts/check-syntax.mjs",
     "test": "node --test test/*.test.js",
-    "test:watch": "node --test --watch test/*.test.js"
+    "test:watch": "node --test --watch test/*.test.js",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --noEmit",
+    "coverage": "node --test --experimental-test-coverage --test-coverage-lines=85 --test-coverage-branches=65 --test-coverage-functions=80 test/*.test.js",
+    "quality": "npm run check && npm run lint && npm run format:check && npm run typecheck && npm run coverage"
   }
 }

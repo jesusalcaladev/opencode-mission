@@ -73,14 +73,19 @@ async function fixture() {
   await ensureMission(root, { id: "loop-test" });
   await writeTextAtomic(
     path.join(missionDir(root), "criteria.json"),
-    JSON.stringify({ version: 1, checks: [{ id: "done", cmd: "test -f done.txt", expect: "exit0", timeout_ms: 5000 }] }),
+    JSON.stringify({
+      version: 1,
+      checks: [{ id: "done", cmd: "test -f done.txt", expect: "exit0", timeout_ms: 5000 }],
+    })
   );
   await writeTextAtomic(
     path.join(missionDir(root), "tasks.json"),
     JSON.stringify({
       version: 1,
-      tasks: [{ id: 1, subject: "Create done.txt", status: "pending", blocked_by: [], verify: "done" }],
-    }),
+      tasks: [
+        { id: 1, subject: "Create done.txt", status: "pending", blocked_by: [], verify: "done" },
+      ],
+    })
   );
   await writeTextAtomic(
     path.join(missionDir(root), "state.json"),
@@ -99,7 +104,7 @@ async function fixture() {
       stage_reports: {},
       review_attempts: 0,
       continuous_improvement: false,
-    }),
+    })
   );
   return root;
 }
@@ -186,7 +191,10 @@ test("supervisor: mission_write cannot rewrite the harness contract", async () =
     const criteriaPath = path.join(missionDir(root), "criteria.json");
     const before = await readFile(criteriaPath, "utf8");
 
-    const refused = await sup.toolWrite("ses_test", { path: ".mission/criteria.json", content: '{"checks":[]}' });
+    const refused = await sup.toolWrite("ses_test", {
+      path: ".mission/criteria.json",
+      content: '{"checks":[]}',
+    });
     assert.match(refused, /Refusing to write mission control files/);
     assert.equal(await readFile(criteriaPath, "utf8"), before);
 
@@ -238,13 +246,24 @@ test("v2 migration: v1 missions gain progress, memory and charter", async () => 
   const root = await mkdtemp(path.join(os.tmpdir(), "mission-v2-migrate-"));
   try {
     await mkdir(missionDir(root), { recursive: true });
-    await writeTextAtomic(path.join(missionDir(root), "mission.md"), "---\nid: old\n---\nOld mission.\n");
-    await writeTextAtomic(path.join(missionDir(root), "criteria.json"), JSON.stringify({ checks: [{ id: "x", cmd: "true" }] }));
+    await writeTextAtomic(
+      path.join(missionDir(root), "mission.md"),
+      "---\nid: old\n---\nOld mission.\n"
+    );
+    await writeTextAtomic(
+      path.join(missionDir(root), "criteria.json"),
+      JSON.stringify({ checks: [{ id: "x", cmd: "true" }] })
+    );
     await writeTextAtomic(
       path.join(missionDir(root), "tasks.json"),
-      JSON.stringify({ tasks: [{ id: 1, subject: "old task", status: "in_progress", verify: "x", blocked_by: [] }] }),
+      JSON.stringify({
+        tasks: [{ id: 1, subject: "old task", status: "in_progress", verify: "x", blocked_by: [] }],
+      })
     );
-    await writeTextAtomic(path.join(missionDir(root), "state.json"), JSON.stringify({ status: "running", session_id: "lead" }));
+    await writeTextAtomic(
+      path.join(missionDir(root), "state.json"),
+      JSON.stringify({ status: "running", session_id: "lead" })
+    );
     await writeTextAtomic(path.join(missionDir(root), "journal.md"), "# Journal\n\n");
 
     await ensureMission(root);
@@ -266,7 +285,7 @@ test("memory: compaction distills decisions into memory.md", async () => {
     const sup = new Supervisor(fakeCtx());
     await writeTextAtomic(
       path.join(missionDir(root), "journal.md"),
-      "# Journal\n\n[t1] decided to use leases instead of dispatched_tasks\n[t2] looked at the tree and did nothing\n",
+      "# Journal\n\n[t1] decided to use leases instead of dispatched_tasks\n[t2] looked at the tree and did nothing\n"
     );
     await sup.compactMemory(root, { turn: 4 });
     const memory = await readFile(path.join(missionDir(root), "memory.md"), "utf8");
@@ -285,7 +304,16 @@ test("lease: an expired worker lease is reclaimed on the next idle", async () =>
     const sup = new Supervisor(ctx);
     await sup.start("ses_test", root);
     await saveProgress(root, [
-      { id: 1, subject: "Create done.txt", status: "in_progress", owner: "dead_worker", attempts: 0, lease_until: Date.now() - 1000, last_error: "", verify: "done" },
+      {
+        id: 1,
+        subject: "Create done.txt",
+        status: "in_progress",
+        owner: "dead_worker",
+        attempts: 0,
+        lease_until: Date.now() - 1000,
+        last_error: "",
+        verify: "done",
+      },
     ]);
     await sup.handleIdle("ses_test");
     const journal = await readFile(path.join(missionDir(root), "journal.md"), "utf8");
@@ -336,7 +364,9 @@ test("supervisor: parallel journal writes never lose a line", async () => {
   try {
     const sup = new Supervisor(fakeCtx());
     await sup.start("ses_test", root);
-    await Promise.all(Array.from({ length: 25 }, (_, i) => sup.journal(root, `parallel line ${i}`)));
+    await Promise.all(
+      Array.from({ length: 25 }, (_, i) => sup.journal(root, `parallel line ${i}`))
+    );
     const journal = await readFile(path.join(missionDir(root), "journal.md"), "utf8");
     for (let i = 0; i < 25; i += 1) assert.match(journal, new RegExp(`parallel line ${i}`));
     sup.dispose();
@@ -354,14 +384,22 @@ test("supervisor: a done report with a red verify check is rejected and retried"
     state.last_checks = [{ id: "done", ok: false, summary: "exit 1" }];
     await saveState(root, state);
 
-    const refused = await sup.toolTaskDone("ses_test", { id: 1, status: "done", summary: "I wrote done.txt" });
+    const refused = await sup.toolTaskDone("ses_test", {
+      id: 1,
+      status: "done",
+      summary: "I wrote done.txt",
+    });
     assert.match(refused, /Report rejected/);
     assert.equal((await loadProgress(root))[0].attempts, 1);
 
     const green = await loadState(root);
     green.last_checks = [{ id: "done", ok: true, summary: "exit 0" }];
     await saveState(root, green);
-    const accepted = await sup.toolTaskDone("ses_test", { id: 1, status: "done", summary: "done.txt now exists" });
+    const accepted = await sup.toolTaskDone("ses_test", {
+      id: 1,
+      status: "done",
+      summary: "done.txt now exists",
+    });
     assert.match(accepted, /Report recorded/);
     assert.equal((await loadProgress(root))[0].status, "completed");
     sup.dispose();
@@ -376,7 +414,15 @@ test("watchdog: a stalled mission gets a validated new plan from the model", asy
     const plan = {
       objective: "New approach",
       checks: [{ id: "newcheck", cmd: "test -f new.txt", expect: "exit0", timeout_ms: 10000 }],
-      tasks: [{ id: 1, subject: "Create new.txt", files: ["new.txt"], verify: "newcheck", blocked_by: [] }],
+      tasks: [
+        {
+          id: 1,
+          subject: "Create new.txt",
+          files: ["new.txt"],
+          verify: "newcheck",
+          blocked_by: [],
+        },
+      ],
       settings: { max_turns: 12, budget_usd: 5, max_failures: 3, handoff_every_turns: 0 },
     };
     const ctx = fakeCtx();
@@ -416,9 +462,12 @@ test("roles: read-only agents cannot write and implementers stay in their files"
     sup.workers.set("ses_test", { root, taskId: 1, leadID: "lead" });
     assert.match(
       await sup.toolWrite("ses_test", { path: "other.txt", content: "hello" }),
-      /outside task #1 files/,
+      /outside task #1 files/
     );
-    assert.match(await sup.toolWrite("ses_test", { path: "done.txt", content: "hello" }), /Wrote done\.txt/);
+    assert.match(
+      await sup.toolWrite("ses_test", { path: "done.txt", content: "hello" }),
+      /Wrote done\.txt/
+    );
     sup.dispose();
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -437,18 +486,29 @@ test("pipeline: high severity review blocks completion, clean review allows it",
     state.stage = "review";
     state.continuous_improvement = false;
     state.review_attempts = 0;
-    state.stage_reports = { review: { text: "found a bug\nSEVERITY: high — wrong output", at: "" } };
-    assert.equal((await sup.runRolePipeline("ses_test", root, state, tasks, [], { type: "complete" })).type, "continue");
+    state.stage_reports = {
+      review: { text: "found a bug\nSEVERITY: high — wrong output", at: "" },
+    };
+    assert.equal(
+      (await sup.runRolePipeline("ses_test", root, state, tasks, [], { type: "complete" })).type,
+      "continue"
+    );
     assert.equal(state.review_attempts, 1);
 
     state.stage = "review";
     state.review_attempts = 2;
     state.stage_reports = { review: { text: "SEVERITY: high — still broken", at: "" } };
-    assert.equal((await sup.runRolePipeline("ses_test", root, state, tasks, [], { type: "complete" })).reason, "review-high");
+    assert.equal(
+      (await sup.runRolePipeline("ses_test", root, state, tasks, [], { type: "complete" })).reason,
+      "review-high"
+    );
 
     state.stage = "review";
     state.stage_reports = { review: { text: "SEVERITY: low — style only", at: "" } };
-    assert.equal((await sup.runRolePipeline("ses_test", root, state, tasks, [], { type: "complete" })).type, "complete");
+    assert.equal(
+      (await sup.runRolePipeline("ses_test", root, state, tasks, [], { type: "complete" })).type,
+      "complete"
+    );
     sup.dispose();
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -463,7 +523,9 @@ test("pipeline: investigate and review stages dispatch their own agents", async 
     await sup.start("ses_test", root);
     const state = await loadState(root);
     state.stage = "investigate";
-    const afterInvestigate = await sup.runRolePipeline("ses_test", root, state, [], [], { type: "complete" });
+    const afterInvestigate = await sup.runRolePipeline("ses_test", root, state, [], [], {
+      type: "complete",
+    });
     assert.equal(afterInvestigate.type, "continue");
     assert.equal(state.stage, "implement");
     assert.ok(ctx.workerPrompts.some((p) => p.text.includes("MISSION INVESTIGATOR")));
@@ -476,7 +538,7 @@ test("pipeline: investigate and review stages dispatch their own agents", async 
       state,
       [{ id: 1, status: "completed" }],
       [],
-      { type: "complete" },
+      { type: "complete" }
     );
     assert.equal(afterReview.type, "continue");
     assert.ok(ctx.workerPrompts.some((p) => p.text.includes("MISSION REVIEWER")));
@@ -501,7 +563,10 @@ test("improve: a valuable finding creates one bounded improvement task", async (
     assert.equal((await loadTasks(root)).length, 2);
     assert.equal(state.improve_cycles, 1);
     assert.equal(state.stage, "implement");
-    assert.match(await readFile(path.join(missionDir(root), "improvements.md"), "utf8"), /impact: high/);
+    assert.match(
+      await readFile(path.join(missionDir(root), "improvements.md"), "utf8"),
+      /impact: high/
+    );
     sup.dispose();
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -556,8 +621,14 @@ test("continuity: chain starts the next roadmap item and carries memory", async 
     const ctx = fakeCtx();
     const sup = new Supervisor(ctx);
     await sup.start("ses_test", root);
-    await saveRoadmap(root, "# Roadmap\n\n- [ ] id: first: do one thing\n- [ ] id: second: do another\n");
-    await writeTextAtomic(path.join(missionDir(root), "memory.md"), "decided to keep the contract small");
+    await saveRoadmap(
+      root,
+      "# Roadmap\n\n- [ ] id: first: do one thing\n- [ ] id: second: do another\n"
+    );
+    await writeTextAtomic(
+      path.join(missionDir(root), "memory.md"),
+      "decided to keep the contract small"
+    );
 
     const started = await sup.continueChain(root, "ses_test");
     assert.equal(started, true);
@@ -565,7 +636,10 @@ test("continuity: chain starts the next roadmap item and carries memory", async 
     const roadmap = await readFile(path.join(missionDir(root), "roadmap.md"), "utf8");
     assert.match(roadmap, /- \[x\] id: first/);
     assert.match(roadmap, /- \[ \] id: second/);
-    assert.match(await readFile(path.join(missionDir(root), "memory.md"), "utf8"), /contract small/);
+    assert.match(
+      await readFile(path.join(missionDir(root), "memory.md"), "utf8"),
+      /contract small/
+    );
     assert.match(ctx.prompts.at(-1), /MISSION CHAIN/);
     sup.dispose();
   } finally {

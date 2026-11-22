@@ -8,6 +8,7 @@ max_wallclock_min: 60
 max_failures: 3
 isolation: none
 ---
+
 Create a tiny dependency-free Node CLI in this workspace with three passing tests.
 
 `cli.js --version` must print exactly `1.0.0`. `cli.js 2 3` must print `5`.

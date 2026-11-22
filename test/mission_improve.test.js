@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseFindings, rankFindings, cycleDecision, worthImproving } from "../src/mission/improve.js";
+import {
+  parseFindings,
+  rankFindings,
+  cycleDecision,
+  worthImproving,
+} from "../src/mission/improve.js";
 
 test("improve: FINDING lines are parsed into structured items", () => {
   const text = [
@@ -16,7 +21,9 @@ test("improve: FINDING lines are parsed into structured items", () => {
 });
 
 test("improve: only findings above the impact threshold are ranked", () => {
-  const findings = parseFindings("FINDING: impact=high risk=low files=a.js fix crash\nFINDING: impact=low risk=low files=b.js style");
+  const findings = parseFindings(
+    "FINDING: impact=high risk=low files=a.js fix crash\nFINDING: impact=low risk=low files=b.js style"
+  );
   const ranked = rankFindings(findings, "medium");
   assert.equal(ranked.length, 1);
   assert.equal(ranked[0].impact, "high");

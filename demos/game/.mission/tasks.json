@@ -1,0 +1,59 @@
+{
+  "version": 2,
+  "tasks": [
+    {
+      "id": 1,
+      "subject": "Create engine.js with createEngine() and a fixed-step state.frame counter",
+      "files": ["engine.js"],
+      "verify": "loop",
+      "blocked_by": [],
+      "status": "pending",
+      "milestone": "core"
+    },
+    {
+      "id": 2,
+      "subject": "Make engine.step deterministic for identical initial states",
+      "files": ["engine.js"],
+      "verify": "determinism",
+      "blocked_by": [1],
+      "status": "pending",
+      "milestone": "core"
+    },
+    {
+      "id": 3,
+      "subject": "Create ecs.js with createWorld(), add(), get() and remove()",
+      "files": ["ecs.js"],
+      "verify": "ecs",
+      "blocked_by": [],
+      "status": "pending",
+      "milestone": "core"
+    },
+    {
+      "id": 4,
+      "subject": "Create physics.js with an aabb(rectA, rectB) overlap function",
+      "files": ["physics.js"],
+      "verify": "collision",
+      "blocked_by": [],
+      "status": "pending",
+      "milestone": "gameplay"
+    },
+    {
+      "id": 5,
+      "subject": "Create assets/sprites.json with a player sprite manifest entry",
+      "files": ["assets/sprites.json"],
+      "verify": "assets",
+      "blocked_by": [],
+      "status": "pending",
+      "milestone": "gameplay"
+    },
+    {
+      "id": 6,
+      "subject": "Create demo.js that runs the engine headless and prints FRAME",
+      "files": ["demo.js"],
+      "verify": "smoke",
+      "blocked_by": [1, 3, 4, 5],
+      "status": "pending",
+      "milestone": "demo"
+    }
+  ]
+}

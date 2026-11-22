@@ -2,9 +2,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
-import { mkdtemp, writeFile, rm, mkdir, stat } from "node:fs/promises";
+import { mkdtemp, writeFile, rm, stat } from "node:fs/promises";
 import { runCommand } from "../src/checks.js";
-import { checkTestIntegrity, createWorktree, gitCommit, hashTests, isGitRepo } from "../src/verify.js";
+import {
+  checkTestIntegrity,
+  createWorktree,
+  gitCommit,
+  hashTests,
+  isGitRepo,
+} from "../src/verify.js";
 
 test("hashTests and checkTestIntegrity: additions are fine, edits and deletions are not", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "mission-verify-"));

@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars -- shared preamble / compatibility signature */
 // OpenCode plugin entrypoint: /mission commands, mission_* tools, and the two hooks
 // that make the supervisor autonomous (context injection + idle continuation).
 
@@ -5,6 +6,8 @@ import { Plugin } from "@opencode/plugin";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { Supervisor } from "./supervisor.js";
+import { duckDuckGoProvider, braveProvider, serperProvider, tavilyProvider } from "./research.js";
+import { toolDefinitions } from "./tool-definitions.js";
 
 const obj = (properties, required = []) => ({
   type: "object",
@@ -18,6 +21,8 @@ const HELP = [
   "/mission start <what to do>   Plan the objective, then run it autonomously with parallel workers",
   "/mission start <dir>          Start a pre-authored mission in an existing directory",
   "/mission status        Show state, checks and next task",
+  "/mission research <q>  Research a question on the web, with images and sources",
+  "/mission pause         Pause at the next idle boundary (remove PAUSE to resume)",
   "/mission stop          Stop the mission; state is kept on disk",
   "/mission resume [dir]  Resume a stopped mission",
   "/mission help          Show this help",
@@ -30,7 +35,9 @@ function expandHome(p) {
 function looksLikePath(p) {
   if (!p) return false;
   const v = expandHome(p);
-  return v.startsWith("/") || v.startsWith("./") || v.startsWith("../") || existsSync(path.resolve(v));
+  return (
+    v.startsWith("/") || v.startsWith("./") || v.startsWith("../") || existsSync(path.resolve(v))
+  );
 }
 
 export default Plugin.define({
@@ -59,6 +66,17 @@ export default Plugin.define({
     const registrations = [];
 
     registrations.push(
+      await ctx.websearch.transform((editor) => {
+        editor.add(duckDuckGoProvider);
+        if (process.env.BRAVE_SEARCH_API_KEY)
+          editor.add(braveProvider(process.env.BRAVE_SEARCH_API_KEY));
+        if (process.env.SERPER_API_KEY) editor.add(serperProvider(process.env.SERPER_API_KEY));
+        if (process.env.TAVILY_API_KEY) editor.add(tavilyProvider(process.env.TAVILY_API_KEY));
+        if (editor.default.get() === undefined) editor.default.set("mission-duckduckgo");
+      })
+    );
+
+    registrations.push(
       await ctx.command.transform((editor) => {
         editor.add({
           name: "mission",
@@ -84,6 +102,14 @@ export default Plugin.define({
                 }
                 break;
               }
+              case "research": {
+                reply = await supervisor.planAndResearch(sessionID, arg);
+                break;
+              }
+              case "pause": {
+                reply = await supervisor.pause(sessionID);
+                break;
+              }
               case "resume": {
                 const root = arg || supervisor.rootFor(sessionID) || ctx.location.directory;
                 reply = await supervisor.resume(sessionID, root);
@@ -91,7 +117,9 @@ export default Plugin.define({
               }
               case "status": {
                 const root = supervisor.rootFor(sessionID);
-                reply = root ? await supervisor.statusText(root) : "No mission is active in this session.";
+                reply = root
+                  ? await supervisor.statusText(root)
+                  : "No mission is active in this session.";
                 break;
               }
               case "stop":
@@ -102,109 +130,28 @@ export default Plugin.define({
             }
             // On start/resume the queued prompt already begins the turn; adding a
             // synthetic notice there risks two idle boundaries for one command.
-            if (sub !== "start" && sub !== "resume") {
-              await ctx.session.synthetic({ sessionID, text: `[mission] ${reply}` }).catch(() => {});
+            if (sub !== "start" && sub !== "resume" && sub !== "research") {
+              await ctx.session
+                .synthetic({ sessionID, text: `[mission] ${reply}` })
+                .catch(() => {});
             }
           },
         });
-      }),
+      })
     );
 
-    registrations.push(
-      await ctx.tool.transform((editor) => {
-        editor.namespace({
-          name: "mission",
-          description: "Mission workspace tools: write files, run the real checks, declare a verdict.",
-        });
-        editor.add({
-          name: "status",
-          description: "Show the active mission's state: objective progress, checks, tasks, budget and next task.",
-          input: obj({}),
-          options: { namespace: "mission", codemode: false },
-          execute: async (_input, toolCtx) => ({ content: supervisor.toolStatus(toolCtx.sessionID) }),
-        });
-        editor.add({
-          name: "write",
-          description: "Atomically create or overwrite a file INSIDE the mission workspace. Paths outside the workspace are refused.",
-          input: obj({ path: str, content: str }, ["path", "content"]),
-          options: { namespace: "mission", codemode: false },
-          execute: async (input, toolCtx) => ({ content: await supervisor.toolWrite(toolCtx.sessionID, input) }),
-        });
-        editor.add({
-          name: "check",
-          description: "Run every criterion command with a timeout and return pass/fail with evidence paths. Call this after each change.",
-          input: obj({}),
-          options: { namespace: "mission", codemode: false },
-          execute: async (_input, toolCtx) => ({ content: await supervisor.toolCheck(toolCtx.sessionID) }),
-        });
-        editor.add({
-          name: "verdict",
-          description:
-            'Declare mission_verdict(status="met"|"blocked", summary, what_would_unblock?). The harness always re-runs the checks; a red check beats a "met" verdict.',
-          input: obj(
-            { status: str, summary: str, what_would_unblock: str },
-            ["status", "summary"],
-          ),
-          options: { namespace: "mission", codemode: false },
-          execute: async (input, toolCtx) => ({ content: await supervisor.toolVerdict(toolCtx.sessionID, input) }),
-        });
-        editor.add({
-          name: "report",
-          description: "Store a stage report (investigator findings or reviewer SEVERITY findings). Read-only roles cannot write files but can report.",
-          input: obj({ role: str, text: str }, ["text"]),
-          options: { namespace: "mission", codemode: false },
-          execute: async (input, toolCtx) => ({ content: await supervisor.toolReport(toolCtx.sessionID, input) }),
-        });
-        editor.add({
-          name: "heartbeat",
-          description: "Renew the lease of your assigned task while you work, so it is not reclaimed as silent.",
-          input: obj({ id: { type: "integer" } }),
-          options: { namespace: "mission", codemode: false },
-          execute: async (input, toolCtx) => ({ content: await supervisor.toolHeartbeat(toolCtx.sessionID, input) }),
-        });
-        editor.add({
-          name: "fact",
-          description: "Store a durable fact (kind, subject, text) that survives context compaction and appears in every brief.",
-          input: obj({ kind: str, subject: str, text: str }, ["subject", "text"]),
-          options: { namespace: "mission", codemode: false },
-          execute: async (input, toolCtx) => ({ content: await supervisor.toolFact(toolCtx.sessionID, input) }),
-        });
-        editor.add({
-          name: "log",
-          description: "Append a short note to the mission journal so the next context window knows what you tried.",
-          input: obj({ text: str }, ["text"]),
-          options: { namespace: "mission", codemode: false },
-          execute: async (input, toolCtx) => ({ content: await supervisor.toolLog(toolCtx.sessionID, input) }),
-        });
-        editor.add({
-          name: "task_done",
-          description:
-            "Worker tool: report that your assigned task is finished. The lead still verifies the task's check before marking it complete.",
-          input: obj(
-            {
-              id: { type: "integer" },
-              status: { type: "string", enum: ["done", "failed"] },
-              summary: str,
-              evidence: { type: "array", items: str },
-            },
-            ["summary"],
-          ),
-          options: { namespace: "mission", codemode: false },
-          execute: async (input, toolCtx) => ({ content: await supervisor.toolTaskDone(toolCtx.sessionID, input) }),
-        });
-      }),
-    );
+    registrations.push(await toolDefinitions(ctx, supervisor));
 
     registrations.push(
       await ctx.session.hook("context", (event) => {
         supervisor.inject(event);
-      }),
+      })
     );
 
     registrations.push(
       await ctx.session.hook("experimental.idle", (event) => {
         return supervisor.handleIdle(event.sessionID);
-      }),
+      })
     );
 
     return async () => {

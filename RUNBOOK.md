@@ -16,15 +16,45 @@ Use a **path** instead of prose to resume a pre-authored mission:
 
 Set these in `.mission/mission.md` frontmatter (the planner writes defaults):
 
-| Key | Effect |
-| --- | --- |
-| `max_turns` | Lead turns before `max-turns` |
-| `budget_usd` | Stops when the provider reports cost >= this |
-| `max_wallclock_min` | Hard wall-clock deadline from `started_at` |
-| `max_writes` | Successful `mission_write` calls before `write-ceiling` |
-| `max_failures` | Consecutive failed lead turns before abort |
+| Key                 | Effect                                                  |
+| ------------------- | ------------------------------------------------------- |
+| `max_turns`         | Lead turns before `max-turns`                           |
+| `budget_usd`        | Stops when the provider reports cost >= this            |
+| `max_wallclock_min` | Hard wall-clock deadline from `started_at`              |
+| `max_writes`        | Successful `mission_write` calls before `write-ceiling` |
+| `max_failures`      | Consecutive failed lead turns before abort              |
 
 If the model is unpriced, cost is $0: rely on turns, wall-clock and writes.
+
+## Campaign mode (default for large objectives)
+
+For objectives like “build a complete game engine”, the planner switches to
+`autonomy: campaign`. It writes requirements and a definition of done, and the
+harness keeps working across many budget windows:
+
+- soft budgets (`max_turns`, `max_writes`, `budget_usd`) auto-extend while
+  verified progress continues;
+- hard stops are `max_wallclock_min` (8h by default), `hard_budget_usd` ($25 by
+  default), `STOP`, `PAUSE`, a blocked verdict and test erosion;
+- `PAUSE` stops at the next idle boundary without aborting. Remove the file and
+  run `/mission resume <workspace>` to continue;
+- the goal auditor checks requirements before completion. Uncovered requirements
+  become new tasks/e2e checks instead of a false “complete”.
+
+Monitor it from the TUI with `ctrl+shift+m` (dashboard) or from disk with
+`state.json` (look at `history`, `agent_runs`, `goal_audits`, `extensions`).
+
+## Research missions
+
+```text
+/mission research compare ECS libraries for a 2D game engine
+```
+
+This creates a normal verified mission whose artifacts are `research/report.md`,
+`research/sources.json` and `research/images/`. Web search uses OpenCode's
+websearch provider (DuckDuckGo by default, Brave when `BRAVE_SEARCH_API_KEY` is
+set). Fetching refuses private addresses. Image search uses Openverse with a
+Wikimedia fallback; `mission_image_generate` uses an image model if configured.
 
 ## Chaining missions for hours
 
@@ -75,18 +105,18 @@ The mission ends with `status: aborted` and `finish_reason: stop-file`. Remove
 
 ## Common symptoms
 
-| Symptom | Meaning | Action |
-| --- | --- | --- |
-| `test-erosion` | A test file was edited/deleted after baseline | Review the diff, restore the test, resume |
-| `repeated-execution-failure` | Provider failing after `max_failures` | Fix credentials/quota, resume |
-| `write-ceiling` | Agent writing too much | Raise `max_writes` only if the writes are useful |
-| Task stuck `in_progress` | Worker died / stopped sending heartbeats | Wait one idle: the `lease_ms` expires and the task is reclaimed |
-| `lease expired` on a live worker | Worker did not call `mission_heartbeat` | Raise `lease_ms`; the worker prompt already asks for heartbeats |
-| `re-plan applied` | Same approach failed twice | Read `memory.md` to see the discarded approach |
-| `lease expired` in journal | A worker went silent | Expected; the harness retried it |
-| `rescue timer re-admitted` | A session went quiet without an idle event | Expected; the supervisor resumed it |
-| `chain exhausted` | All roadmap items are done | Add more items to `roadmap.md` |
-| `review-high` | Reviewer found high severity issues twice | Read `state.stage_reports.review`, fix, resume |
+| Symptom                          | Meaning                                       | Action                                                          |
+| -------------------------------- | --------------------------------------------- | --------------------------------------------------------------- |
+| `test-erosion`                   | A test file was edited/deleted after baseline | Review the diff, restore the test, resume                       |
+| `repeated-execution-failure`     | Provider failing after `max_failures`         | Fix credentials/quota, resume                                   |
+| `write-ceiling`                  | Agent writing too much                        | Raise `max_writes` only if the writes are useful                |
+| Task stuck `in_progress`         | Worker died / stopped sending heartbeats      | Wait one idle: the `lease_ms` expires and the task is reclaimed |
+| `lease expired` on a live worker | Worker did not call `mission_heartbeat`       | Raise `lease_ms`; the worker prompt already asks for heartbeats |
+| `re-plan applied`                | Same approach failed twice                    | Read `memory.md` to see the discarded approach                  |
+| `lease expired` in journal       | A worker went silent                          | Expected; the harness retried it                                |
+| `rescue timer re-admitted`       | A session went quiet without an idle event    | Expected; the supervisor resumed it                             |
+| `chain exhausted`                | All roadmap items are done                    | Add more items to `roadmap.md`                                  |
+| `review-high`                    | Reviewer found high severity issues twice     | Read `state.stage_reports.review`, fix, resume                  |
 
 ## Long-run checklist
 

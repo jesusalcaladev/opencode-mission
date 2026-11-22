@@ -35,12 +35,20 @@ test("chain: markItemDone only ticks the requested item", () => {
 
 test("chain: EXTEND only applies to budget stops and respects the ceiling", () => {
   assert.equal(
-    chainDecision({ decision: { type: "stop", reason: "max-turns" }, extendRequested: true, extensions: 0 }).type,
-    "extend",
+    chainDecision({
+      decision: { type: "stop", reason: "max-turns" },
+      extendRequested: true,
+      extensions: 0,
+    }).type,
+    "extend"
   );
   assert.equal(
-    chainDecision({ decision: { type: "stop", reason: "blocked" }, extendRequested: true, extensions: 0 }).type,
-    "stop",
+    chainDecision({
+      decision: { type: "stop", reason: "blocked" },
+      extendRequested: true,
+      extensions: 0,
+    }).type,
+    "stop"
   );
   assert.equal(
     chainDecision({
@@ -48,9 +56,12 @@ test("chain: EXTEND only applies to budget stops and respects the ceiling", () =
       extendRequested: true,
       extensions: DEFAULT_MAX_EXTENSIONS,
     }).type,
-    "stop",
+    "stop"
   );
-  assert.equal(chainDecision({ decision: { type: "continue" }, extendRequested: true }).type, "work");
+  assert.equal(
+    chainDecision({ decision: { type: "continue" }, extendRequested: true }).type,
+    "work"
+  );
 });
 
 test("chain: an extension grows the active budgets", () => {

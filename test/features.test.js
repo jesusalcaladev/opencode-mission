@@ -13,8 +13,12 @@ function fakeCtx() {
   return {
     storage: { get: async () => [], set: async () => {} },
     session: {
-      prompt: async () => {}, context: async () => [], synthetic: async () => {},
-      create: async () => ({ id: "w" }), get: async () => ({ id: "lead", time: {} }), wait: async () => {},
+      prompt: async () => {},
+      context: async () => [],
+      synthetic: async () => {},
+      create: async () => ({ id: "w" }),
+      get: async () => ({ id: "lead", time: {} }),
+      wait: async () => {},
       switchModel: async () => {},
     },
     model: { list: async () => [], default: async () => null },
@@ -26,7 +30,15 @@ function fakeCtx() {
 test("checks: a valid cache skips command execution", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "mission-cache-"));
   try {
-    const criteria = { checks: [{ id: "counter", cmd: `node -e "require('fs').appendFileSync('count.txt','x')"`, expect: "exit0" }] };
+    const criteria = {
+      checks: [
+        {
+          id: "counter",
+          cmd: `node -e "require('fs').appendFileSync('count.txt','x')"`,
+          expect: "exit0",
+        },
+      ],
+    };
     const stamp = await workspaceStamp(root);
     const first = await runChecks(root, criteria, { stamp, cache: null });
     assert.equal(first.length, 1);
@@ -60,7 +72,11 @@ test("instructions: AGENTS.md enters the brief and CLAUDE.md is deduped", async 
 
 test("facts: upsert replaces by kind+subject and renders compactly", () => {
   let facts = [];
-  facts = upsertFact(facts, { kind: "decision", subject: "state", text: "use a pure state machine" });
+  facts = upsertFact(facts, {
+    kind: "decision",
+    subject: "state",
+    text: "use a pure state machine",
+  });
   facts = upsertFact(facts, { kind: "decision", subject: "state", text: "use mixins" });
   facts = upsertFact(facts, { kind: "blocker", subject: "quota", text: "provider exhausted" });
   assert.equal(facts.length, 2);

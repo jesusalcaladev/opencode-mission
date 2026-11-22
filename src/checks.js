@@ -8,7 +8,16 @@ import path from "node:path";
 import { missionDir, FILES } from "./mission.js";
 
 const MAX_OUTPUT = 64 * 1024;
-const SKIP = new Set([".git", ".mission", "node_modules", "zig-cache", ".zig-cache", "zig-out", "dist", "build"]);
+const SKIP = new Set([
+  ".git",
+  ".mission",
+  "node_modules",
+  "zig-cache",
+  ".zig-cache",
+  "zig-out",
+  "dist",
+  "build",
+]);
 
 export function evaluateExpect(expect, { code, stdout }) {
   const spec = String(expect ?? "exit0");
@@ -88,8 +97,13 @@ export async function runChecks(root, criteria, options = {}) {
   const stamp = options.stamp ?? (await workspaceStamp(root));
   const signature = criteriaSignature(checks);
   const cache = options.cache;
-  if (cache && cache.stamp === stamp && cache.signature === signature &&
-      Array.isArray(cache.results) && cache.results.length === checks.length) {
+  if (
+    cache &&
+    cache.stamp === stamp &&
+    cache.signature === signature &&
+    Array.isArray(cache.results) &&
+    cache.results.length === checks.length
+  ) {
     return cache.results;
   }
 
@@ -101,16 +115,35 @@ export async function runChecks(root, criteria, options = {}) {
       const index = next++;
       const check = checks[index];
       const started = Date.now();
-      const run = await runCommand(check.cmd, root, Number.isFinite(check.timeout_ms) ? check.timeout_ms : 30000);
-      const ok = evaluateExpect(check.expect, run);
-      const summary = (run.stdout.trim() || run.stderr.trim() || `exit ${run.code}`).split("\n")[0].slice(0, 200);
+      const attempts = Math.max(0, Math.min(2, Number(check.retries) || 0)) + 1;
+      let run = null;
+      let ok = false;
+      for (let attempt = 0; attempt < attempts; attempt += 1) {
+        run = await runCommand(
+          check.cmd,
+          root,
+          Number.isFinite(check.timeout_ms) ? check.timeout_ms : 30000
+        );
+        ok = evaluateExpect(check.expect, run);
+        if (ok) break;
+      }
+      const summary = (run.stdout.trim() || run.stderr.trim() || `exit ${run.code}`)
+        .split("\n")[0]
+        .slice(0, 200);
       const evidence = path.join(evidenceDir, `${check.id}.txt`);
       await writeFile(
         evidence,
-        `[check] ${check.id}\n[cmd] ${check.cmd}\n[exit] ${run.code}\n[ms] ${Date.now() - started}\n[expect] ${check.expect ?? "exit0"}\n[ok] ${ok}\n\n--- stdout ---\n${run.stdout}\n--- stderr ---\n${run.stderr}\n`,
-        "utf8",
+        `[check] ${check.id}\n[cmd] ${check.cmd}\n[exit] ${run.code}\n[ms] ${Date.now() - started}\n[attempts] ${attempts}\n[expect] ${check.expect ?? "exit0"}\n[ok] ${ok}\n\n--- stdout ---\n${run.stdout}\n--- stderr ---\n${run.stderr}\n`,
+        "utf8"
       );
-      results[index] = { id: check.id, ok, exit: run.code, ms: Date.now() - started, summary, evidence: path.relative(root, evidence) };
+      results[index] = {
+        id: check.id,
+        ok,
+        exit: run.code,
+        ms: Date.now() - started,
+        summary,
+        evidence: path.relative(root, evidence),
+      };
     }
   }
   await Promise.all(Array.from({ length: Math.min(limit, checks.length) }, () => worker()));

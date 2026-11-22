@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars -- shared preamble / compatibility signature */
 // Durable mission memory: distill the append-only journal into a bounded,
 // stable brief that is regenerated from disk on every model request.
 // This is the cure for "the agent loses context after a few hours".
@@ -9,7 +10,8 @@ import { selectTask } from "./decide.js";
 export const MEMORY_BUDGET = 4000;
 export const JOURNAL_TAIL = 1200;
 
-const WORTH_KEEPING = /decid|approach|discard|blocker|blocked|verified|commit|erosion|fatal|failed|retry|handoff|migrat|constraint|must not|owner/i;
+const WORTH_KEEPING =
+  /decid|approach|discard|blocker|blocked|verified|commit|erosion|fatal|failed|retry|handoff|migrat|constraint|must not|owner/i;
 
 function stripStamp(line) {
   return line.replace(/^\[[^\]]+\]\s*/, "").trim();
@@ -26,7 +28,10 @@ export function distill({ journal = "", memory = "", summary = "", maxChars = ME
     seen.add(key);
     kept.push(line);
   }
-  const lines = journal.split(/\r?\n/).map(stripStamp).filter((l) => l.length > 0 && !l.startsWith("#"));
+  const lines = journal
+    .split(/\r?\n/)
+    .map(stripStamp)
+    .filter((l) => l.length > 0 && !l.startsWith("#"));
   for (let i = lines.length - 1; i >= 0; i -= 1) {
     const line = lines[i];
     if (!WORTH_KEEPING.test(line)) continue;
@@ -47,11 +52,27 @@ export function distill({ journal = "", memory = "", summary = "", maxChars = ME
   };
 }
 
-export function buildBrief({ root, missionText, state, tasks, journal, results, memory = "", summary = "", progress = [], instructions = "", facts = [] }) {
+export function buildBrief({
+  root,
+  missionText,
+  state,
+  tasks,
+  journal,
+  results,
+  memory = "",
+  summary = "",
+  progress = [],
+  instructions = "",
+  facts = [],
+  requirements = [],
+  research = "",
+}) {
   const task = selectTask(tasks);
   const green = results.filter((r) => r.ok).length;
   const failed = results.filter((r) => !r.ok).map((r) => `${r.id}: ${r.summary ?? "failed"}`);
-  const leased = progress.filter((p) => p.status === "in_progress" && p.lease_until > Date.now()).map((p) => `#${p.id}`);
+  const leased = progress
+    .filter((p) => p.status === "in_progress" && p.lease_until > Date.now())
+    .map((p) => `#${p.id}`);
   const lines = [
     "MISSION BRIEF (harness-owned — regenerated from disk, not from conversation history)",
     `Id: ${state.id ?? "mission"}`,
@@ -73,6 +94,15 @@ export function buildBrief({ root, missionText, state, tasks, journal, results, 
     `Workers in flight: ${leased.length ? leased.join(", ") : "none"}`,
     `Checks: ${green}/${results.length} green${failed.length ? ` · failing: ${failed.join("; ")}` : ""}`,
     `Turn ${state.turn}/${state.max_turns} · cost $${state.cost_usd.toFixed(2)}/$${state.budget_usd.toFixed(2)} · strategy tier ${state.strategy_tier}`,
+    `Autonomy: ${state.autonomy ?? (state.auto_extend ? "campaign" : "standard")} · auto-extend ${state.auto_extend ? "on" : "off"} · extensions ${state.extensions ?? 0}/${state.max_extensions ?? 3}`,
+    "",
+    "REQUIREMENTS (completion requires every one to be covered by a green check)",
+    requirements.length
+      ? requirements.map((r) => `- ${r.id}: ${r.text} [${(r.checks ?? []).join(",")}]`).join("\n")
+      : "(none declared)",
+    "",
+    "RESEARCH",
+    research.trim().slice(0, 3000) || "(none)",
     "",
     "DURABLE FACTS",
     renderFacts(facts) || "(none)",

@@ -24,7 +24,10 @@ export function parseFindings(text) {
     out.push({
       impact: IMPACT_RANK[impact] ? impact : IMPACT.LOW,
       risk: String(field("risk", "low")).toLowerCase(),
-      files: String(filesMatch?.[1] ?? "").split(/[,|]/).map((f) => f.trim()).filter(Boolean),
+      files: String(filesMatch?.[1] ?? "")
+        .split(/[,|]/)
+        .map((f) => f.trim())
+        .filter(Boolean),
       text: body.replace(/\b(impact|risk|files)\s*=\s*[^\s,;]+\s*/gi, "").trim(),
     });
   }
@@ -39,12 +42,21 @@ export function rankFindings(findings, minImpact = DEFAULT_MIN_IMPACT) {
   return findings
     .filter((f) => worthImproving(f, minImpact))
     .sort((a, b) => {
-      const score = (f) => IMPACT_RANK[f.impact] * 10 - (f.risk === "low" ? 2 : f.risk === "medium" ? 1 : 0);
+      const score = (f) =>
+        IMPACT_RANK[f.impact] * 10 - (f.risk === "low" ? 2 : f.risk === "medium" ? 1 : 0);
       return score(b) - score(a);
     });
 }
 
-export function cycleDecision({ finding, improveCycles = 0, maxCycles = DEFAULT_MAX_CYCLES, cleanRounds = 0, maxCleanRounds = DEFAULT_CLEAN_ROUNDS, stopFile = false, outOfBudget = false }) {
+export function cycleDecision({
+  finding,
+  improveCycles = 0,
+  maxCycles = DEFAULT_MAX_CYCLES,
+  cleanRounds = 0,
+  maxCleanRounds = DEFAULT_CLEAN_ROUNDS,
+  stopFile = false,
+  outOfBudget = false,
+}) {
   if (stopFile) return { type: "stop", reason: "stop-file" };
   if (outOfBudget) return { type: "stop", reason: "budget" };
   if (improveCycles >= maxCycles) return { type: "stop", reason: "improve-cycle-limit" };

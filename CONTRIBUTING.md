@@ -11,31 +11,44 @@ git clone https://github.com/<owner>/opencode-mission.git
 cd opencode-mission
 npm install
 npm test
+npm run quality
 ```
 
-Requirements: OpenCode 2.x, Node.js 20+.
+Requirements: OpenCode 2.x, Node.js 20+. `npm run quality` runs syntax checking,
+ESLint, Prettier, TypeScript (TUI) and coverage gates.
 
 ## Project layout
 
 ```text
 src/
-  index.js       plugin entrypoint: commands, tools, hooks, cleanup
-  supervisor.js  the loop: verify, dispatch workers, decide, persist
-  mission.js     pure state machine + durable state helpers
-  planner.js     natural language -> validated executable plan
+  index.js       plugin entrypoint: commands, hooks, cleanup
+  tool-definitions.js  mission_* tool registration
+  supervisor.js  constructor + main loop; behavior lives in small mixins
+  supervisor/    decisions, state, recovery, models, lifecycle, planning,
+                 intelligence, roles-pipeline, goal-audit, workers, scheduler, tools
+  mission.js     facade; implementation in mission/*.js (pure + persistence)
+  planner.js     facade; implementation in planner/*.js
+  research.js    facade; implementation in research/*.js
   team.js        pure wave scheduling and worker prompt building
-  checks.js      criteria runner with timeout and evidence
+  checks.js      criteria runner with timeout, retries and evidence
   verify.js      test hashing, git checkpoints, worktree isolation
+  tui.tsx        single sidebar HUD + on-demand dashboard (no duplicate HUDs)
 test/            node:test suites (no TUI, no network)
-demos/cli/       pre-authored example mission
+demos/           pre-authored example missions (cli and game)
 CONTRACT.md      host-agnostic contract
 ```
 
 ## Ground rules
 
-- Plain ESM JavaScript. No TypeScript build step, no transpiler.
-- Keep `mission.js`, `planner.js`, `team.js`, `checks.js` and `verify.js` free of
-  OpenCode imports: they must stay testable with `node --test` alone.
+- Plain ESM JavaScript for runtime code; TypeScript only for the TUI surface.
+- No source file may exceed **250 lines**. Split by responsibility instead.
+- Supervisor mixins never destructure the dependency barrel: use `this.d.*` only.
+- Keep pure modules free of OpenCode imports: they must stay testable with
+  `node --test` alone.
+- Never leave an empty `catch {}`. Use `this.warn(root, label, err)` (journal +
+  optional debug log); document the rare best-effort exception in a comment.
+- Coverage gates: ≥85% lines, ≥65% branches, ≥80% functions. Network/TUI paths
+  are integration-tested with mocked `fetch` rather than fully unit-tested.
 - Every behavior change needs a test. A feature without a passing test is not done.
 - All user-visible text, comments and test names are in English.
 - Never let the model set `status: complete`. Only `Supervisor.finish` writes terminal
@@ -49,9 +62,10 @@ CONTRACT.md      host-agnostic contract
 
 ## Adding a tool
 
-1. Register it in `src/index.js` inside `ctx.tool.transform`, using the `mission`
-   namespace and `codemode: false`.
-2. Implement the handler on `Supervisor` in `src/supervisor.js`.
+1. Register it in `src/tool-definitions.js` using the `mission` namespace and
+   `codemode: false`.
+2. Implement the handler as a mixin method (workspace tools in `supervisor/tools.js`,
+   research tools in `supervisor/research-tools.js`).
 3. Add a test in `test/supervisor.test.js` using `fakeCtx()`.
 4. Document it in the tool table in `README.md`.
 

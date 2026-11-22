@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars -- shared preamble / compatibility signature */
 // Task leases: the cure for "a worker dies and nobody picks up its task".
 // A task is claimed with a deadline, released on a structured report, and
 // reclaimed automatically when the lease expires. Attempts are bounded.
@@ -86,7 +87,9 @@ export function fail(progress, id, error, now = Date.now()) {
 
 export function expired(progress, now = Date.now()) {
   return progress
-    .filter((p) => p.status === TASK_STATUS.IN_PROGRESS && p.lease_until > 0 && p.lease_until <= now)
+    .filter(
+      (p) => p.status === TASK_STATUS.IN_PROGRESS && p.lease_until > 0 && p.lease_until <= now
+    )
     .map((p) => p.id);
 }
 

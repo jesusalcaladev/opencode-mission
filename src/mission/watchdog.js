@@ -11,7 +11,13 @@ export function needsReplan(state) {
   return state.turn - (state.last_progress_turn ?? 0) >= STALL_TURNS;
 }
 
-export function replanPrompt({ objective, memory = "", journalTail = "", results = [], tasks = [] }) {
+export function replanPrompt({
+  objective,
+  memory = "",
+  journalTail = "",
+  results = [],
+  tasks = [],
+}) {
   const failing = results.filter((r) => !r.ok).map((r) => `${r.id}: ${r.summary ?? "failed"}`);
   const taskLines = tasks.map((t) => `#${t.id} ${t.subject} [${t.status}] verify=${t.verify}`);
   return [

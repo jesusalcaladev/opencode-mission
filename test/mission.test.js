@@ -66,7 +66,10 @@ test("the harness completes tasks from green checks, including chains", () => {
     { id: "b", ok: true },
     { id: "c", ok: true },
   ]);
-  assert.deepEqual(all.tasks.map((t) => t.status), ["completed", "completed", "completed"]);
+  assert.deepEqual(
+    all.tasks.map((t) => t.status),
+    ["completed", "completed", "completed"]
+  );
 });
 
 test("decideNext: a red check never completes, even with a met verdict", () => {
@@ -83,7 +86,10 @@ test("decideNext: a red check never completes, even with a met verdict", () => {
 test("decideNext: green checks plus finished tasks complete; the verdict is not needed", () => {
   const d = decideNext({
     state: baseState(),
-    results: [{ id: "a", ok: true }, { id: "b", ok: true }],
+    results: [
+      { id: "a", ok: true },
+      { id: "b", ok: true },
+    ],
     tasks: [{ id: 1, status: "completed" }],
     verdict: null,
     stopFile: false,
@@ -94,9 +100,18 @@ test("decideNext: green checks plus finished tasks complete; the verdict is not 
 test("decideNext: STOP file, budget, turn ceiling and blocked verdict", () => {
   const green = [{ id: "a", ok: true }];
   const done = [{ id: 1, status: "completed" }];
-  assert.equal(decideNext({ state: baseState(), results: green, tasks: done, stopFile: true }).reason, "stop-file");
-  assert.equal(decideNext({ state: baseState({ cost_usd: 5 }), results: green, tasks: done }).reason, "budget");
-  assert.equal(decideNext({ state: baseState({ turn: 12 }), results: green, tasks: done }).reason, "max-turns");
+  assert.equal(
+    decideNext({ state: baseState(), results: green, tasks: done, stopFile: true }).reason,
+    "stop-file"
+  );
+  assert.equal(
+    decideNext({ state: baseState({ cost_usd: 5 }), results: green, tasks: done }).reason,
+    "budget"
+  );
+  assert.equal(
+    decideNext({ state: baseState({ turn: 12 }), results: green, tasks: done }).reason,
+    "max-turns"
+  );
   const blocked = decideNext({
     state: baseState(),
     results: [],
@@ -152,7 +167,10 @@ test("ensureMission is idempotent and STOP is detected", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "mission-test-"));
   try {
     const first = await ensureMission(root, { objective: "Do the work." });
-    await writeFile(path.join(first.dir, "criteria.json"), '{"checks":[{"id":"x","cmd":"true","expect":"exit0"}]}');
+    await writeFile(
+      path.join(first.dir, "criteria.json"),
+      '{"checks":[{"id":"x","cmd":"true","expect":"exit0"}]}'
+    );
     await ensureMission(root);
     const criteria = await loadCriteria(root);
     assert.equal(criteria.checks[0].id, "x");
@@ -177,7 +195,10 @@ test("runChecks writes evidence and reports red/green honestly", async () => {
       ],
     };
     const results = await runChecks(root, criteria);
-    assert.deepEqual(results.map((r) => r.ok), [true, false]);
+    assert.deepEqual(
+      results.map((r) => r.ok),
+      [true, false]
+    );
     assert.equal(results[0].evidence, path.join(".mission", "evidence", "version.txt"));
     assert.match(results[0].summary, /1\.0\.0/);
   } finally {
