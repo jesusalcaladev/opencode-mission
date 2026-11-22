@@ -22,6 +22,7 @@ import { selectTask, applyTaskResults, nextStrategy, decideNext } from "./missio
 import { buildBrief, distill, MEMORY_BUDGET } from "./mission/memory.js";
 import { needsReplan, replanPrompt, afterReplan, STALL_TURNS } from "./mission/watchdog.js";
 import { ROLE, STAGE, canWrite, parseReview, stageFor, roleForStage, MAX_REVIEW_ATTEMPTS } from "./mission/roles.js";
+import { parseFindings, rankFindings, cycleDecision, worthImproving } from "./mission/improve.js";
 import {
   DEFAULT_MAX_EXTENSIONS,
   EXTEND_TURNS,
@@ -77,6 +78,10 @@ export {
   stageFor,
   roleForStage,
   MAX_REVIEW_ATTEMPTS,
+  parseFindings,
+  rankFindings,
+  cycleDecision,
+  worthImproving,
   DEFAULT_MAX_EXTENSIONS,
   EXTEND_TURNS,
   EXTEND_MINUTES,
@@ -170,6 +175,8 @@ export async function ensureMission(root, options = {}) {
   if (!(await fileExists(journalPath))) await writeTextAtomic(journalPath, "# Journal\n\n");
   const roadmapPath = path.join(dir, FILES.roadmap);
   if (!(await fileExists(roadmapPath))) await writeTextAtomic(roadmapPath, "# Roadmap\n\n");
+  const improvementsPath = path.join(dir, FILES.improvements);
+  if (!(await fileExists(improvementsPath))) await writeTextAtomic(improvementsPath, "# Improvements\n\n");
 
   const statePath = path.join(dir, FILES.state);
   if (!(await fileExists(statePath))) await writeJsonAtomic(statePath, initialState());
@@ -205,6 +212,11 @@ export async function ensureMission(root, options = {}) {
   if (Number.isFinite(meta.handoff_every_turns)) state.handoff_every_turns = meta.handoff_every_turns;
   if (Number.isFinite(meta.max_wallclock_min)) state.max_wallclock_min = meta.max_wallclock_min;
   if (Number.isFinite(meta.lease_ms) && meta.lease_ms >= 1000) state.lease_ms = meta.lease_ms;
+  if (meta.continuous_improvement === true || meta.continuous_improvement === "true") state.continuous_improvement = true;
+  if (meta.continuous_improvement === false || meta.continuous_improvement === "false") state.continuous_improvement = false;
+  if (Number.isFinite(meta.max_improve_cycles)) state.max_improve_cycles = meta.max_improve_cycles;
+  if (Number.isFinite(meta.max_clean_audit_rounds)) state.max_clean_audit_rounds = meta.max_clean_audit_rounds;
+  if (typeof meta.min_impact === "string") state.min_impact = meta.min_impact;
   state.isolation = typeof meta.isolation === "string" ? meta.isolation : "none";
   await writeJsonAtomic(statePath, state);
 
@@ -277,6 +289,12 @@ export async function stopRequested(root) {
 }
 export async function loadRoadmap(root) {
   return readText(path.join(missionDir(root), FILES.roadmap));
+}
+export async function loadImprovements(root) {
+  return readText(path.join(missionDir(root), FILES.improvements));
+}
+export async function saveImprovements(root, text) {
+  await writeTextAtomic(path.join(missionDir(root), FILES.improvements), text);
 }
 export async function saveRoadmap(root, text) {
   await writeTextAtomic(path.join(missionDir(root), FILES.roadmap), text);

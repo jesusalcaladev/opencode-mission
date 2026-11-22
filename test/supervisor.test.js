@@ -98,6 +98,7 @@ async function fixture() {
       stage: "done",
       stage_reports: {},
       review_attempts: 0,
+      continuous_improvement: false,
     }),
   );
   return root;
@@ -434,6 +435,7 @@ test("pipeline: high severity review blocks completion, clean review allows it",
     for (const t of tasks) t.status = "completed";
 
     state.stage = "review";
+    state.continuous_improvement = false;
     state.review_attempts = 0;
     state.stage_reports = { review: { text: "found a bug\nSEVERITY: high — wrong output", at: "" } };
     assert.equal((await sup.runRolePipeline("ses_test", root, state, tasks, [], { type: "complete" })).type, "continue");
@@ -478,6 +480,45 @@ test("pipeline: investigate and review stages dispatch their own agents", async 
     );
     assert.equal(afterReview.type, "continue");
     assert.ok(ctx.workerPrompts.some((p) => p.text.includes("MISSION REVIEWER")));
+    sup.dispose();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("improve: a valuable finding creates one bounded improvement task", async () => {
+  const root = await fixture();
+  try {
+    const ctx = fakeCtx();
+    const sup = new Supervisor(ctx);
+    await sup.start("ses_test", root);
+    const state = await loadState(root);
+    state.stage_reports = {
+      auditor: { text: "FINDING: impact=high risk=low files=done.txt add a guard", at: "" },
+    };
+    const decision = await sup.runImproveCycle("ses_test", root, state, []);
+    assert.equal(decision.type, "continue");
+    assert.equal((await loadTasks(root)).length, 2);
+    assert.equal(state.improve_cycles, 1);
+    assert.equal(state.stage, "implement");
+    assert.match(await readFile(path.join(missionDir(root), "improvements.md"), "utf8"), /impact: high/);
+    sup.dispose();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("improve: two clean audits stop with an explicit reason", async () => {
+  const root = await fixture();
+  try {
+    const sup = new Supervisor(fakeCtx());
+    await sup.start("ses_test", root);
+    const state = await loadState(root);
+    state.clean_audit_rounds = 2;
+    state.stage_reports = { auditor: { text: "NO FINDINGS", at: "" } };
+    const decision = await sup.runImproveCycle("ses_test", root, state, []);
+    assert.equal(decision.type, "complete");
+    assert.equal(decision.reason, "no-high-value-improvements");
     sup.dispose();
   } finally {
     await rm(root, { recursive: true, force: true });

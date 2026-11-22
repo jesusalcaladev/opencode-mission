@@ -18,7 +18,12 @@ import {
   ROLE,
   TASK_STATUS,
   canWrite,
+  cycleDecision,
+  loadImprovements,
+  parseFindings,
+  rankFindings,
   roleForStage,
+  saveImprovements,
   parseReview,
   stageFor,
   VERSION,
@@ -445,6 +450,9 @@ export class Supervisor {
       `max_failures: ${s.max_failures}`,
       `max_wallclock_min: ${s.max_wallclock_min ?? 0}`,
       `lease_ms: ${s.lease_ms ?? 300000}`,
+      `continuous_improvement: ${s.continuous_improvement ?? true}`,
+      `max_improve_cycles: ${s.max_improve_cycles ?? 5}`,
+      `min_impact: ${s.min_impact ?? "medium"}`,
       `max_writes: ${s.max_writes ?? 0}`,
       `isolation: ${s.isolation}`,
       "---",
@@ -632,6 +640,65 @@ export class Supervisor {
     this.briefs.set(sessionID, buildBrief({ root, missionText, state, tasks, journal, memory, summary, progress, results }));
   }
 
+  // After the objective is met, audit the repo and keep improving it while
+  // there is worthwhile work and budget. Stops on a value threshold, not "never".
+  async runImproveCycle(sessionID, root, state, results) {
+    const report = state.stage_reports?.auditor?.text ?? "";
+    if (!report) {
+      const answer = await this.dispatchRoleStage(
+        sessionID,
+        root,
+        "auditor",
+        `[MISSION AUDITOR] Workspace: ${root}\nRead-only. Find real improvements and emit one line each:\nFINDING: impact=high|medium|low risk=low|medium|high files=a.js,b.js description\nCall mission_report(role='auditor', text=...). If nothing valuable, write 'NO FINDINGS'.`,
+      );
+      state.stage_reports = state.stage_reports ?? {};
+      state.stage_reports.auditor = { text: answer?.text ?? "NO FINDINGS", at: new Date().toISOString() };
+      await this.saveStateSafe(root, state);
+      await this.journal(root, "improvement audit dispatched");
+      return { type: "continue" };
+    }
+
+    const findings = rankFindings(parseFindings(report), state.min_impact ?? "medium");
+    const decision = cycleDecision({
+      finding: findings[0],
+      improveCycles: state.improve_cycles ?? 0,
+      maxCycles: state.max_improve_cycles ?? 5,
+      cleanRounds: state.clean_audit_rounds ?? 0,
+      maxCleanRounds: state.max_clean_audit_rounds ?? 2,
+      stopFile: await stopRequested(root),
+      outOfBudget: state.cost_usd >= state.budget_usd,
+    });
+
+    if (decision.type === "stop") {
+      await this.journal(root, `continuous improvement stopping: ${decision.reason}`);
+      return { type: "complete", reason: decision.reason };
+    }
+    if (decision.type === "audit") {
+      state.clean_audit_rounds = (state.clean_audit_rounds ?? 0) + 1;
+      delete state.stage_reports.auditor;
+      await this.saveStateSafe(root, state);
+      await this.journal(root, `audit round without valuable findings (${state.clean_audit_rounds}/${state.max_clean_audit_rounds ?? 2})`);
+      return { type: "continue" };
+    }
+
+    const finding = decision.finding;
+    const tasks = await loadTasks(root);
+    const id = tasks.reduce((max, t) => Math.max(max, t.id), 0) + 1;
+    const subject = `[improve ${finding.impact}] ${finding.text.slice(0, 120)}`;
+    tasks.push({ id, subject, files: finding.files, status: TASK_STATUS.PENDING, blocked_by: [], verify: "" });
+    const progress = await loadProgress(root);
+    progress.push({ id, subject, status: TASK_STATUS.PENDING, owner: null, attempts: 0, lease_until: 0, last_error: "", verify: "" });
+    state.improve_cycles = (state.improve_cycles ?? 0) + 1;
+    state.stage = STAGE.IMPLEMENT;
+    state.clean_audit_rounds = 0;
+    delete state.stage_reports.auditor;
+    await Promise.all([this.saveTasksSafe(root, tasks), this.saveProgressSafe(root, progress), this.saveStateSafe(root, state)]);
+    const line = `- [ ] id: imp-${id} | impact: ${finding.impact} | risk: ${finding.risk} | files: ${finding.files.join(",")} | ${finding.text.slice(0, 120)}`;
+    await saveImprovements(root, `${await loadImprovements(root)}${line}\n`);
+    await this.journal(root, `improvement cycle ${state.improve_cycles}: #${id} ${subject}`);
+    return { type: "continue" };
+  }
+
   // One shared workspace, specialized agents. The harness owns the stage
   // transitions; an agent cannot skip review or write from a read-only role.
   async dispatchRoleStage(sessionID, root, role, promptText) {
@@ -717,6 +784,9 @@ export class Supervisor {
       await Promise.all([this.saveTasksSafe(root, stored), this.saveProgressSafe(root, leased), this.saveStateSafe(root, state)]);
       await this.journal(root, `review requires rework (attempt ${state.review_attempts})`);
       return { type: "continue" };
+    }
+    if (next.decision === "complete" && state.continuous_improvement !== false) {
+      return this.runImproveCycle(sessionID, root, state, results);
     }
 
     if (next.stage === STAGE.REVIEW) {

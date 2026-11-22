@@ -8,6 +8,16 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Continuous improvement is **on by default**: after the original criteria are
+  green, a read-only auditor proposes findings, worthwhile ones become bounded
+  implementation cycles, and each cycle is verified. Stops on a value threshold
+  (2 clean audits), cycle limit, budget or `STOP` — never infinitely.
+- `.mission/improvements.md` backlog and `src/mission/improve.js` pure decision
+  module. `finish_reason` now reports `no-high-value-improvements` or
+  `improve-cycle-limit`.
+
+### Added
+
 - Specialized roles in the **same workspace** (no worktrees): Investigator
   (read-only research), Implementer (writes only assigned `files`), Tester and
   Reviewer (read-only). The harness owns stage transitions and tool permissions.

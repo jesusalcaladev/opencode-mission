@@ -133,6 +133,18 @@ Three independent hard stops supplement the turn and failure ceilings:
 `budget_usd` (from reported assistant cost), `max_wallclock_min` (from
 `started_at`) and `max_writes` (successful `mission_write` calls).
 
+## Continuous improvement
+
+After the initial criteria are green, the mission does **not** stop. It enters
+an audit/improve cycle: a read-only auditor emits `FINDING: impact=… risk=…
+files=… description`, the harness ranks them, and worthwhile ones become one
+bounded task with owned files. Each cycle is verified as usual.
+
+The loop stops when two consecutive audits find nothing above `min_impact`
+(default `medium`), when `max_improve_cycles` (5) is reached, on budget, or on
+`STOP`. The final `finish_reason` says why. `continuous_improvement: false` is
+the opt-out for deterministic runs.
+
 ## Continuity across hours
 
 A mission may declare a `roadmap.md` checklist. On `complete`, the harness ticks

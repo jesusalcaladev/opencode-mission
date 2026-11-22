@@ -37,6 +37,9 @@ and **task leases** (a dead worker's task is reclaimed instead of stuck forever)
   (writes only its assigned files), Tester and Reviewer; no worktrees needed.
 - **Review gate** — completion requires a clean `SEVERITY` review; high findings
   reopen the work and then block.
+- **Continuous improvement** — after the objective is met, an auditor proposes
+  real improvements and the harness implements them in bounded cycles until no
+  valuable work remains (or a budget stops it).
 - **Durable state** — `state.json`, `journal.md`, `evidence/` and a session→mission
   registry survive restarts; `/mission resume` and auto-resume pick up where it left off.
 - **Context handoff** — rotate to a fresh session on a schedule; the journal is the memory.
@@ -177,6 +180,9 @@ designed to be ported to other harnesses (a zode implementation is planned).
 | `max_wallclock_min` | `0` | Wall-clock ceiling (0 = off) |
 | `lease_ms` | `300000` | Worker lease duration; renew with `mission_heartbeat` |
 | `max_extensions` | `3` | How many times the `EXTEND` file may raise the budgets |
+| `continuous_improvement` | `true` | Audit/improve after the objective is met |
+| `max_improve_cycles` | `5` | Bounded improvement cycles |
+| `min_impact` | `medium` | Minimum finding impact worth implementing |
 | `max_writes` | `0` | Successful file writes before aborting (0 = off) |
 | `max_failures` | `3` | Failed turns before aborting |
 | `handoff_every_turns` | `4` | Rotate to a fresh session (0 = off) |
