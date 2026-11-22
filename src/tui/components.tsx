@@ -4,6 +4,10 @@ import { Show } from "solid-js";
 import { budgetColor, money, statusColor, statusGlyph, truncate } from "./format.js";
 import { useColors, type MissionSnapshot } from "./types";
 
+// Compatibility re-export: older TUI module graphs import DashboardBody from here.
+// Keeps hot reloads in already-open sessions working after the component split.
+export { Header, MetricsPanel, DashboardBody } from "./dashboard-parts";
+
 export function Section(props: { title: string; children: any; flex?: number; minWidth?: number }) {
   const g = useColors();
   return (

@@ -43,8 +43,11 @@ export default Plugin.define({
     const location = context.location ?? context.data.location.default();
 
     const navigate = (sessionID: string) => {
-      if (context.ui.tabs.enabled()) context.ui.tabs.focus(sessionID);
-      else context.ui.router.navigate({ type: "session", sessionID });
+      // Always route to the session. Tabs are opened as a side effect, never as
+      // a replacement for navigation (focus() is a no-op for a session that has
+      // not been added to the tab strip yet, which left new missions invisible).
+      if (context.ui.tabs.enabled()) context.ui.tabs.open(sessionID);
+      context.ui.router.navigate({ type: "session", sessionID });
     };
 
     const missionCommand = async (text: string, sessionID?: string) => {
