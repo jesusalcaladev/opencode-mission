@@ -62,6 +62,7 @@ export class Supervisor {
     this.busy = new Set();
     this.workers = new Map();
     this.knownWorkers = new Set();
+    this.briefs = new Map();
     this.stateQueue = new Map();
     this.timers = new Set();
     this.controller = new AbortController();
@@ -155,6 +156,12 @@ export class Supervisor {
     const state = await loadState(root);
     if (state.status !== STATUS.RUNNING || this.busy.has(sessionID)) return;
 
+    // OpenCode can emit both `failed` and `interrupted` for one turn. Count
+    // only one failure per short window so a single error cannot abort a mission.
+    const now = Date.now();
+    if (state.last_failure_at && now - state.last_failure_at < 1500) return;
+    state.last_failure_at = now;
+
     const message = shortError(error);
     state.failures = (state.failures ?? 0) + 1;
     await appendJournal(root, `execution failure ${state.failures}/${state.max_failures}: ${message}`);
@@ -163,7 +170,7 @@ export class Supervisor {
       return;
     }
 
-    await this.rotateModel(sessionID, state, message);
+    await this.rotateModel(sessionID, message);
     state.last_prompt_at = Date.now();
     await saveState(root, state);
 
@@ -187,7 +194,7 @@ export class Supervisor {
     this.timers.add(timer);
   }
 
-  async rotateModel(sessionID, state, message) {
+  async rotateModel(sessionID, message) {
     if (!/(quota|402|credits|rate.?limit|429|overloaded)/i.test(message)) return;
     const fallback = this.options.fallbackModel;
     try {
@@ -218,10 +225,6 @@ export class Supervisor {
 
   rootFor(sessionID) {
     return this.bySession.get(sessionID) ?? null;
-  }
-
-  sessionFor(root) {
-    return this.byRoot.get(path.resolve(root)) ?? null;
   }
 
   effectiveRoot(root, state) {
@@ -777,6 +780,12 @@ export class Supervisor {
     const root = this.rootFor(sessionID);
     if (!root) return "No active mission.";
     if (typeof rel !== "string" || typeof content !== "string") return "path and content are required strings.";
+    const normalized = rel.replace(/\\/g, "/").replace(/^\.\//, "");
+    // The harness owns the contract. Allowing the model to rewrite criteria,
+    // tasks or state would let it define "done" as whatever it wrote.
+    if (normalized === ".mission" || normalized.startsWith(".mission/")) {
+      return "Refusing to write mission control files under .mission/ (the harness owns criteria, tasks and state).";
+    }
     const state = await loadState(root);
     const workRoot = this.effectiveRoot(root, state);
     const target = path.resolve(workRoot, rel);
@@ -835,14 +844,14 @@ export class Supervisor {
     }
   }
 
-  toolTaskDone(sessionID, input) {
+  async toolTaskDone(sessionID, input) {
     const root = this.rootFor(sessionID);
-    if (!root) return Promise.resolve("No active mission.");
+    if (!root) return "No active mission.";
     const worker = this.workers.get(sessionID);
     const id = Number(input?.id ?? worker?.taskId);
     const summary = String(input?.summary ?? "").trim();
-    if (!Number.isFinite(id) || id < 1) return Promise.resolve("task id is required.");
-    if (summary.length < 3) return Promise.resolve("summary is required (at least 3 characters).");
+    if (!Number.isFinite(id) || id < 1) return "task id is required.";
+    if (summary.length < 3) return "summary is required (at least 3 characters).";
     return this.serialize(root, async () => {
       const state = await loadState(root);
       if (!state.task_reports || typeof state.task_reports !== "object") state.task_reports = {};

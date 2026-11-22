@@ -106,6 +106,8 @@ gets a `[MISSION HANDOFF]` notice and is unbound, so it cannot keep the loop ali
 
 ## Integrity and checkpoints
 
+- The `.mission/` directory is **harness-owned**. `mission_write` refuses any path
+  under it, so the model cannot rewrite `criteria.json`, `tasks.json` or `state.json`.
 - Before every decision the harness hashes existing test files
   (`*.test.*`, `*.spec.*`, `test_*.py`, `tests/`…). Adding tests is fine; **editing or
   deleting an existing test aborts the mission** with `test-erosion`.

@@ -61,6 +61,9 @@ test("createWorktree isolates the mission workspace", async () => {
     assert.equal(wt.ok, true, wt.reason);
     assert.equal((await stat(wt.root)).isDirectory(), true);
     assert.equal(wt.branch, "mission/demo");
+    const weird = await createWorktree(root, "bad id/!!");
+    assert.equal(weird.ok, true, weird.reason);
+    assert.equal(weird.branch, "mission/bad-id");
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
 import { Supervisor } from "../src/supervisor.js";
 import { ensureMission, loadState, loadTasks, missionDir, writeTextAtomic } from "../src/mission.js";
 
@@ -155,6 +155,42 @@ test("supervisor: a met verdict with a red check is refused", async () => {
     assert.equal(state.status, "running");
     assert.equal(state.last_verdict, null);
     assert.equal(state.last_checks[0].ok, false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("supervisor: mission_write cannot rewrite the harness contract", async () => {
+  const root = await fixture();
+  try {
+    const ctx = fakeCtx();
+    const sup = new Supervisor(ctx);
+    await sup.start("ses_test", root);
+    const criteriaPath = path.join(missionDir(root), "criteria.json");
+    const before = await readFile(criteriaPath, "utf8");
+
+    const refused = await sup.toolWrite("ses_test", { path: ".mission/criteria.json", content: '{"checks":[]}' });
+    assert.match(refused, /Refusing to write mission control files/);
+    assert.equal(await readFile(criteriaPath, "utf8"), before);
+
+    const accepted = await sup.toolWrite("ses_test", { path: "./notes.txt", content: "hello" });
+    assert.match(accepted, /Wrote notes\.txt/);
+    sup.dispose();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("supervisor: two failure events for one turn count once", async () => {
+  const root = await fixture();
+  try {
+    const ctx = fakeCtx();
+    const sup = new Supervisor(ctx);
+    await sup.start("ses_test", root);
+    await sup.handleFailure("ses_test", new Error("boom"));
+    await sup.handleFailure("ses_test", new Error("boom"));
+    assert.equal((await loadState(root)).failures, 1);
+    sup.dispose();
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -26,7 +26,9 @@ This plugin runs commands. Understand what it trusts:
   rejects `sudo`, `rm -rf /`, destructive `dd`/`mkfs` and network-to-shell pipes, but
   that denylist is a guard, not a sandbox.
 - **`mission_write` is workspace-scoped and atomic.** Absolute paths, `..` traversal
-  and paths outside the mission root are refused.
+  and paths outside the mission root are refused. Paths under `.mission/` are also
+  refused: criteria, tasks and state are harness-owned, so the model cannot redefine
+  what "done" means.
 - **The model cannot declare completion.** It can write files and call
   `mission_verdict`; the harness re-runs the criteria and is the only writer of
   terminal state.

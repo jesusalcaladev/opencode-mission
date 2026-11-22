@@ -80,12 +80,23 @@ export async function gitCommit(root, message) {
   return { ok: true, sha: head.stdout.trim(), reason: "committed" };
 }
 
+function safeRef(value) {
+  return (
+    String(value ?? "mission")
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 48) || "mission"
+  );
+}
+
 export async function createWorktree(root, id) {
   if (!(await isGitRepo(root))) return { ok: false, reason: "not a git repository" };
+  const cleanId = safeRef(id);
   const parent = path.dirname(root);
   const suffix = createHash("sha256").update(root).digest("hex").slice(0, 8);
-  const target = path.join(parent, `.mission-worktree-${id}-${suffix}`);
-  const branch = `mission/${id}`;
+  const target = path.join(parent, `.mission-worktree-${cleanId}-${suffix}`);
+  const branch = `mission/${cleanId}`;
   const result = await runCommand(`git -C ${JSON.stringify(root)} worktree add -B ${JSON.stringify(branch)} ${JSON.stringify(target)} HEAD`, parent, 30000);
   if (result.code !== 0) return { ok: false, reason: `${result.stderr.trim().slice(0, 200)}` };
   return { ok: true, root: target, branch };

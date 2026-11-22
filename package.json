@@ -38,6 +38,7 @@
     "@opencode/plugin": "2.3.2"
   },
   "scripts": {
+    "check": "for f in src/*.js test/*.js; do node --check \"$f\" || exit 1; done",
     "test": "node --test test/*.test.js",
     "test:watch": "node --test --watch test/*.test.js"
   }

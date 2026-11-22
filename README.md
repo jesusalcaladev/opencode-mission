@@ -33,7 +33,9 @@ context compaction, with parallel workers, git checkpoints and hard budgets.
 - **Durable state** — `state.json`, `journal.md`, `evidence/` and a session→mission
   registry survive restarts; `/mission resume` and auto-resume pick up where it left off.
 - **Context handoff** — rotate to a fresh session on a schedule; the journal is the memory.
-- **Integrity guard** — editing or deleting an existing test aborts with `test-erosion`.
+- **Integrity guard** — editing or deleting an existing test aborts with `test-erosion`;
+  `mission_write` refuses any path under `.mission/`, so the model cannot rewrite the
+  criteria, tasks or state that define done.
 - **Checkpoints** — verified progress is committed to git; non-git workspaces are skipped.
 - **Hard stops** — `max_turns`, `budget_usd`, `max_wallclock_min`, `max_failures`, `STOP`.
 
@@ -188,7 +190,8 @@ designed to be ported to other harnesses (a zode implementation is planned).
 
 ```sh
 npm install
-npm test               # 33 tests, no network or TUI required
+npm run check          # syntax check every source and test file
+npm test               # full suite, no network or TUI required
 node --test --watch test/*.test.js
 ```
 
