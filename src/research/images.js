@@ -6,6 +6,19 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createHash } from "node:crypto";
+import { assertSafeUrl, safeFetch } from "./text.js";
+
+// Local cache with the same semantics as search.js. Kept local so Bun's plugin
+// loader does not need a cross-module named import for this helper.
+const IMAGE_CACHE = new Map();
+async function cached(key, ttl, fn) {
+  const hit = IMAGE_CACHE.get(key);
+  if (hit && Date.now() - hit.at < ttl) return hit.value;
+  const value = await fn();
+  IMAGE_CACHE.set(key, { at: Date.now(), value });
+  if (IMAGE_CACHE.size > 200) IMAGE_CACHE.delete(IMAGE_CACHE.keys().next().value);
+  return value;
+}
 
 const UA = "opencode-mission/0.3 (+research)";
 const MAX_PAGE_BYTES = 2 * 1024 * 1024;
@@ -14,8 +27,7 @@ const DEFAULT_TIMEOUT = 15_000;
 const CACHE = new Map();
 const CACHE_TTL = 24 * 60 * 60 * 1000;
 const CACHE_LIMIT = 200;
-import { cached } from "./search.js";
-import { assertSafeUrl, safeFetch } from "./text.js";
+
 export function parseOpenverse(data, limit) {
   return (data?.results ?? []).slice(0, limit).map((r) => ({
     url: String(r.url ?? ""),

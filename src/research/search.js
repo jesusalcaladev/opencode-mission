@@ -4,6 +4,7 @@
 // timeouts and an SSRF guard. Deterministic parsers are unit-testable.
 
 import path from "node:path";
+import { decodeEntities, stripTags } from "./text.js";
 
 const UA = "opencode-mission/0.3 (+research)";
 const MAX_PAGE_BYTES = 2 * 1024 * 1024;
@@ -13,9 +14,7 @@ const CACHE = new Map();
 const CACHE_TTL = 24 * 60 * 60 * 1000;
 const CACHE_LIMIT = 200;
 
-import { decodeEntities, stripTags } from "./text.js";
-
-export async function cached(key, ttl, fn) {
+async function cached(key, ttl, fn) {
   const hit = CACHE.get(key);
   if (hit && Date.now() - hit.at < ttl) return hit.value;
   const value = await fn();
