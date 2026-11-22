@@ -54,7 +54,9 @@ is rejected and the lease is released for retry.
 
 1. `decide()` is the only place that returns `complete` or `stop`.
 2. Terminal state is written by `Supervisor.finish`, never by a tool.
-3. Every state mutation from parallel workers goes through `serialize(root, fn)`.
+3. Every journal/state/progress write goes through the single per-mission
+   `serialize(root, fn)` queue. Reentrant calls from inside `fn` run directly;
+   concurrent callers wait. No write happens outside that queue.
 4. `mission_write` never accepts a path inside `.mission/`.
 5. The injected brief is rebuilt from disk, never from conversation history.
 6. A task with a failed or expired lease is retryable until `MAX_ATTEMPTS`.
@@ -68,6 +70,8 @@ is rejected and the lease is released for retry.
   model, abort after `max_failures`.
 - Worker failure: the owning task's lease is released with an error and the task
   is reclaimed on the next idle; it never counts against the lead's budget.
+- Worker silence: `lease_ms` (default 5 min) bounds a task's lease. Workers call
+  `mission_heartbeat(id)` to renew it; expiry releases the task for retry.
 - Service restart: the mission registry in plugin storage restores the binding
   and auto-resumes a running mission whose last prompt is older than 30 s.
 - Stagnation: tier 2/3 triggers a real re-plan through the model, not just a

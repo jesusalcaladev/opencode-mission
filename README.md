@@ -145,6 +145,7 @@ designed to be ported to other harnesses (a zode implementation is planned).
 | `mission_check` | Run the real criteria and return evidence paths |
 | `mission_verdict` | Declare `met` / `blocked` (harness still verifies) |
 | `mission_task_done` | Worker completion report (harness still verifies) |
+| `mission_heartbeat` | Renew the worker's task lease while working |
 | `mission_log` | Append to the durable journal |
 
 ## Configuration
@@ -169,6 +170,7 @@ designed to be ported to other harnesses (a zode implementation is planned).
 | `max_turns` | `16` | Turn ceiling |
 | `budget_usd` | `5` | Cost ceiling (when the provider reports cost) |
 | `max_wallclock_min` | `0` | Wall-clock ceiling (0 = off) |
+| `lease_ms` | `300000` | Worker lease duration; renew with `mission_heartbeat` |
 | `max_writes` | `0` | Successful file writes before aborting (0 = off) |
 | `max_failures` | `3` | Failed turns before aborting |
 | `handoff_every_turns` | `4` | Rotate to a fresh session (0 = off) |

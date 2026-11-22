@@ -144,6 +144,13 @@ export default Plugin.define({
           execute: async (input, toolCtx) => ({ content: await supervisor.toolVerdict(toolCtx.sessionID, input) }),
         });
         editor.add({
+          name: "heartbeat",
+          description: "Renew the lease of your assigned task while you work, so it is not reclaimed as silent.",
+          input: obj({ id: { type: "integer" } }),
+          options: { namespace: "mission", codemode: false },
+          execute: async (input, toolCtx) => ({ content: await supervisor.toolHeartbeat(toolCtx.sessionID, input) }),
+        });
+        editor.add({
           name: "log",
           description: "Append a short note to the mission journal so the next context window knows what you tried.",
           input: obj({ text: str }, ["text"]),

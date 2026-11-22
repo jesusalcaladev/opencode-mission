@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- One serialized write queue per mission now covers journal, state and progress;
+  25 concurrent journal appends were failing with `ENOENT` on the atomic rename.
+- Worker leases are renewable with `mission_heartbeat(id)` and configurable via
+  `lease_ms` frontmatter, so a slow worker is no longer reclaimed by mistake.
+- `normalizePlan` rejects vacuous checks (`true`, `exit 0`, `echo ok`, `:`) so a
+  model cannot define "done" as a command that verifies nothing.
+
 ### Added
 
 - Real watchdog: after two verified-stalled turns the harness asks the model for a

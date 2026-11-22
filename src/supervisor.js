@@ -41,6 +41,7 @@ import {
   readJournal,
   readJournalTail,
   release,
+  renew,
   retryable,
   saveMemory,
   saveProgress,
@@ -83,6 +84,7 @@ export class Supervisor {
     this.knownWorkers = new Set();
     this.briefs = new Map();
     this.stateQueue = new Map();
+    this.writeOwners = new Set();
     this.timers = new Set();
     this.controller = new AbortController();
     this.maxWorkers = Math.min(8, Math.max(1, Number(options.maxWorkers) || 3));
@@ -136,10 +138,10 @@ export class Supervisor {
       if (state.status !== STATUS.RUNNING) return;
       if (Date.now() - (state.last_prompt_at || 0) < AUTO_RESUME_AGE_MS) return;
 
-      await appendJournal(root, `auto-resume after plugin reload (session ${sessionID})`);
+      await this.journal(root, `auto-resume after plugin reload (session ${sessionID})`);
       state.failures = 0;
       state.last_prompt_at = Date.now();
-      await saveState(root, state);
+      await this.saveStateSafe(root, state);
       await this.refreshBrief(sessionID, root, state.last_checks ?? []);
       await this.ctx.session.prompt({
         sessionID,
@@ -178,8 +180,8 @@ export class Supervisor {
       const owned = progress.find((p) => p.owner === sessionID) ?? (worker ? progress.find((p) => p.id === worker.taskId) : null);
       if (owned) {
         fail(progress, owned.id, shortError(error), Date.now());
-        await saveProgress(root, progress);
-        await appendJournal(root, `worker failure on task #${owned.id}: ${shortError(error)} → lease released for retry`);
+        await this.saveProgressSafe(root, progress);
+        await this.journal(root, `worker failure on task #${owned.id}: ${shortError(error)} → lease released for retry`);
       }
       return;
     }
@@ -194,7 +196,7 @@ export class Supervisor {
 
     const message = shortError(error);
     state.failures = (state.failures ?? 0) + 1;
-    await appendJournal(root, `execution failure ${state.failures}/${state.max_failures}: ${message}`);
+    await this.journal(root, `execution failure ${state.failures}/${state.max_failures}: ${message}`);
     if (state.failures >= (state.max_failures ?? 3)) {
       await this.finish(root, sessionID, state, "aborted", "repeated-execution-failure", `after ${state.failures} failures: ${message}`);
       return;
@@ -202,7 +204,7 @@ export class Supervisor {
 
     await this.rotateModel(sessionID, message);
     state.last_prompt_at = Date.now();
-    await saveState(root, state);
+    await this.saveStateSafe(root, state);
 
     const delayMs = Math.min(2000 * 2 ** (state.failures - 1), 30_000);
     const timer = setTimeout(async () => {
@@ -210,7 +212,7 @@ export class Supervisor {
       try {
         const fresh = await loadState(root);
         if (fresh.status !== STATUS.RUNNING) return;
-        await appendJournal(root, `retrying after ${delayMs}ms backoff`);
+        await this.journal(root, `retrying after ${delayMs}ms backoff`);
         await this.refreshBrief(sessionID, root, fresh.last_checks ?? []);
         await this.ctx.session.prompt({
           sessionID,
@@ -278,27 +280,27 @@ export class Supervisor {
 
     const tasks0 = await loadTasks(root);
     const progress0 = await loadProgress(root);
-    if (progress0.length === 0 && tasks0.length > 0) await saveProgress(root, fromTasks(tasks0));
+    if (progress0.length === 0 && tasks0.length > 0) await this.saveProgressSafe(root, fromTasks(tasks0));
 
     if (state.isolation === "worktree" && !state.worktree_root) {
       const wt = await createWorktree(root, String(state.id ?? "mission"));
       if (wt.ok) {
         state.worktree_root = wt.root;
         state.worktree_branch = wt.branch;
-        await appendJournal(root, `isolated in worktree ${wt.root} (${wt.branch})`);
+        await this.journal(root, `isolated in worktree ${wt.root} (${wt.branch})`);
       } else {
-        await appendJournal(root, `worktree isolation requested but unavailable: ${wt.reason}`);
+        await this.journal(root, `worktree isolation requested but unavailable: ${wt.reason}`);
       }
     }
 
     const workRoot = this.effectiveRoot(root, state);
     const integrity = await checkTestIntegrity(workRoot, state.test_hashes);
     state.test_hashes = integrity.current;
-    await saveState(root, state);
+    await this.saveStateSafe(root, state);
 
     this.bind(sessionID, root);
     await this.persistBinding(sessionID, root);
-    await appendJournal(root, `session ${sessionID} — mission started (turn ${state.turn + 1}/${state.max_turns})`);
+    await this.journal(root, `session ${sessionID} — mission started (turn ${state.turn + 1}/${state.max_turns})`);
 
     let dispatched = false;
     if (options.autoDispatch) await this.ensureWorkingModel(sessionID, root);
@@ -354,7 +356,7 @@ export class Supervisor {
   async ensureWorkingModel(sessionID, root) {
     if (this.options.model) {
       await this.ctx.session.switchModel({ sessionID, model: this.options.model });
-      if (root) await appendJournal(root, `model configured: ${this.options.model.providerID}/${this.options.model.id}`);
+      if (root) await this.journal(root, `model configured: ${this.options.model.providerID}/${this.options.model.id}`);
       return this.options.model;
     }
     const catalog = await this.modelCatalog();
@@ -368,7 +370,7 @@ export class Supervisor {
     if (!free) return undefined;
     try {
       await this.ctx.session.switchModel({ sessionID, model: free });
-      if (root) await appendJournal(root, `model auto-selected: ${free.providerID}/${free.id}`);
+      if (root) await this.journal(root, `model auto-selected: ${free.providerID}/${free.id}`);
     } catch {
       return undefined;
     }
@@ -388,6 +390,7 @@ export class Supervisor {
       `handoff_every_turns: ${s.handoff_every_turns}`,
       `max_failures: ${s.max_failures}`,
       `max_wallclock_min: ${s.max_wallclock_min ?? 0}`,
+      `lease_ms: ${s.lease_ms ?? 300000}`,
       `max_writes: ${s.max_writes ?? 0}`,
       `isolation: ${s.isolation}`,
       "---",
@@ -403,7 +406,7 @@ export class Supervisor {
     await writeJsonAtomic(path.join(dir, "tasks.json"), { version: VERSION, tasks: planned });
     // progress.json may have been seeded by ensureMission from the placeholder
     // task. Keep leases in sync with the actual plan.
-    await saveProgress(root, fromTasks(planned));
+    await this.saveProgressSafe(root, fromTasks(planned));
     const state = await loadState(root);
     Object.assign(state, s, {
       status: STATUS.RUNNING,
@@ -425,7 +428,7 @@ export class Supervisor {
       task_reports: {},
       worker_sessions: [],
     });
-    await saveState(root, state);
+    await this.saveStateSafe(root, state);
   }
 
   // /mission start <natural language objective>
@@ -475,8 +478,8 @@ export class Supervisor {
     state.finished_at = new Date().toISOString();
     state.finish_reason = reason;
     state.summary = summary ?? "";
-    await saveState(root, state);
-    await appendJournal(root, `mission ${status}: ${reason}`);
+    await this.saveStateSafe(root, state);
+    await this.journal(root, `mission ${status}: ${reason}`);
     const label = status === STATUS.COMPLETE ? "MISSION COMPLETE" : "MISSION STOPPED";
     const text = `[${label}] ${reason}${state.unblock ? `. Unblock: ${state.unblock}` : ""}. Mission state: ${path.join(root, ".mission")}`;
     await this.ctx.session.synthetic({ sessionID, text }).catch(() => {});
@@ -557,12 +560,12 @@ export class Supervisor {
       const out = await this.options.generate({ prompt, model: await this.pickPlannerModel() });
       text = typeof out === "string" ? out : (out?.text ?? out?.data?.text ?? "");
     } catch (err) {
-      await appendJournal(root, `re-plan request failed: ${shortError(err)}`);
+      await this.journal(root, `re-plan request failed: ${shortError(err)}`);
       return false;
     }
     const parsed = normalizePlan(text, objectiveOf(missionText), root);
     if (!parsed.ok) {
-      await appendJournal(root, `re-plan rejected: ${parsed.errors.join("; ")}`);
+      await this.journal(root, `re-plan rejected: ${parsed.errors.join("; ")}`);
       return false;
     }
     const planned = parsed.plan.tasks.map((t) => ({ ...t, status: TASK_STATUS.PENDING }));
@@ -570,11 +573,11 @@ export class Supervisor {
     await Promise.all([
       writeJsonAtomic(path.join(dir, "criteria.json"), { version: VERSION, checks: parsed.plan.checks }),
       writeJsonAtomic(path.join(dir, "tasks.json"), { version: VERSION, tasks: planned }),
-      saveProgress(root, fromTasks(planned)),
+      this.saveProgressSafe(root, fromTasks(planned)),
     ]);
     const next = afterReplan(state, state.turn);
     Object.assign(state, next);
-    await saveState(root, state);
+    await this.saveStateSafe(root, state);
     await appendJournal(
       root,
       `re-plan applied at turn ${state.turn}: ${parsed.plan.checks.length} checks, ${planned.length} tasks (strategy reset to 1)`,
@@ -589,7 +592,7 @@ export class Supervisor {
     const [journal, memory, summary] = await Promise.all([readJournal(root), loadMemory(root), loadSummary(root)]);
     const distilled = distill({ journal, memory, summary });
     await Promise.all([saveMemory(root, distilled.memory), saveSummary(root, distilled.summary)]);
-    await appendJournal(root, `memory compacted: ${distilled.memory.split("\n").length} durable entries`);
+    await this.journal(root, `memory compacted: ${distilled.memory.split("\n").length} durable entries`);
   }
 
   async sessionCost(sessionID) {
@@ -612,7 +615,7 @@ export class Supervisor {
     const applied = applyTaskResults(stored, results);
     let tasks = applied.tasks;
     if (applied.changed) {
-      await saveTasks(root, tasks);
+      await this.saveTasksSafe(root, tasks);
       results = await runChecks(workRoot, criteria);
     }
     return { results, tasks };
@@ -683,7 +686,7 @@ export class Supervisor {
           });
           id = created?.id ?? created?.data?.id;
         } catch (err) {
-          await appendJournal(root, `worker spawn failed for task ${task.id}: ${shortError(err)}`);
+          await this.journal(root, `worker spawn failed for task ${task.id}: ${shortError(err)}`);
           continue;
         }
         if (!id) continue;
@@ -703,11 +706,12 @@ export class Supervisor {
       await this.serialize(root, async () => {
         const s = await loadState(root);
         const leased = await loadProgress(root);
+        const ttl = Number(state.lease_ms) || 300000;
         for (const w of spawned) {
-          claim(leased, w.task.id, w.id, Date.now());
+          claim(leased, w.task.id, w.id, Date.now(), ttl);
         }
         s.worker_sessions = [...new Set([...(s.worker_sessions ?? []), ...spawned.map((w) => w.id)])];
-        await Promise.all([saveProgress(root, leased), saveState(root, s)]);
+        await Promise.all([this.saveProgressSafe(root, leased), this.saveStateSafe(root, s)]);
       });
 
       const current = await loadTasks(root);
@@ -715,7 +719,7 @@ export class Supervisor {
         const t = current.find((x) => x.id === w.task.id);
         if (t) t.status = "in_progress";
       }
-      await saveTasks(root, current);
+      await this.saveTasksSafe(root, current);
       await Promise.all(
         spawned.map((w) =>
           this.ctx.session.prompt({
@@ -743,8 +747,8 @@ export class Supervisor {
         this.bySession.delete(w.id);
         this.briefs?.delete(w.id);
       }
-      await Promise.all([saveProgress(root, leased), saveTasks(root, taskList)]);
-      await appendJournal(root, reportsText(fresh.task_reports ?? {}));
+      await Promise.all([this.saveProgressSafe(root, leased), this.saveTasksSafe(root, taskList)]);
+      await this.journal(root, reportsText(fresh.task_reports ?? {}));
     }
     return { ran };
   }
@@ -762,7 +766,7 @@ export class Supervisor {
       const integrity = await checkTestIntegrity(workRoot, state.test_hashes);
       state.test_hashes = integrity.current;
       if (!integrity.ok) {
-        await appendJournal(root, `test integrity refused progress: ${integrity.reason}`);
+        await this.journal(root, `test integrity refused progress: ${integrity.reason}`);
         await this.finish(root, sessionID, state, "aborted", "test-erosion", integrity.reason);
         return;
       }
@@ -772,7 +776,7 @@ export class Supervisor {
         const stored = await loadTasks(root);
         if (stored.length > 0) {
           progress = fromTasks(stored);
-          await saveProgress(root, progress);
+          await this.saveProgressSafe(root, progress);
         }
       }
       const now = Date.now();
@@ -783,9 +787,9 @@ export class Supervisor {
         for (const t of stored) {
           if (overdue.includes(t.id)) t.status = retryable(progress, t.id) ? TASK_STATUS.PENDING : TASK_STATUS.FAILED;
         }
-        await saveTasks(root, stored);
-        await saveProgress(root, progress);
-        await appendJournal(root, `leases expired: ${overdue.map((id) => `#${id}`).join(", ")} → reclaimed`);
+        await this.saveTasksSafe(root, stored);
+        await this.saveProgressSafe(root, progress);
+        await this.journal(root, `leases expired: ${overdue.map((id) => `#${id}`).join(", ")} → reclaimed`);
       }
 
       let { results, tasks } = await this.verify(root, workRoot);
@@ -797,7 +801,7 @@ export class Supervisor {
       const stopFile = await stopRequested(root);
       let decision = decideNext({ state, results, tasks, verdict, stopFile });
       await this.journalTurn(root, state, results, tasks, decision);
-      await saveState(root, state);
+      await this.saveStateSafe(root, state);
       await this.compactMemory(root, state);
 
       if (decision.type === "continue") {
@@ -837,9 +841,9 @@ export class Supervisor {
         const commit = await gitCommit(workRoot, `mission(${state.id ?? "mission"}): turn ${state.turn} — verified progress`);
         if (commit.ok) {
           state.last_commit = commit.sha;
-          await appendJournal(root, `checkpoint committed: ${commit.sha ?? commit.reason}`);
+          await this.journal(root, `checkpoint committed: ${commit.sha ?? commit.reason}`);
         } else {
-          await appendJournal(root, `checkpoint commit skipped: ${commit.reason}`);
+          await this.journal(root, `checkpoint commit skipped: ${commit.reason}`);
         }
       }
 
@@ -855,19 +859,19 @@ export class Supervisor {
             targetSession = newID;
             state.last_handoff_turn = state.turn;
             state.session_id = newID;
-            await appendJournal(root, `context handoff ${sessionID} → ${newID}`);
+            await this.journal(root, `context handoff ${sessionID} → ${newID}`);
             this.unbind(sessionID);
             this.bind(newID, root);
             await this.persistBinding(newID, root);
             await this.ctx.session.synthetic({ sessionID, text: `[MISSION HANDOFF] Continuing in session ${newID}.` }).catch(() => {});
           }
         } catch (err) {
-          await appendJournal(root, `handoff failed, staying in session: ${shortError(err)}`);
+          await this.journal(root, `handoff failed, staying in session: ${shortError(err)}`);
         }
       }
 
       state.last_prompt_at = Date.now();
-      await saveState(root, state);
+      await this.saveStateSafe(root, state);
       await this.refreshBrief(targetSession, root, results);
 
       const failing = results.filter((r) => !r.ok).map((r) => `- ${r.id}: ${r.summary}`).join("\n");
@@ -937,7 +941,7 @@ export class Supervisor {
     await this.serialize(root, async () => {
       const fresh = await loadState(root);
       fresh.writes = (fresh.writes ?? 0) + 1;
-      await saveState(root, fresh);
+      await this.saveStateSafe(root, fresh);
     });
     return `Wrote ${path.relative(workRoot, target)} (${content.length} bytes). Call mission_check to verify.`;
   }
@@ -951,7 +955,7 @@ export class Supervisor {
     const results = await runChecks(workRoot, criteria);
     if (!this.workers.has(sessionID)) {
       state.last_checks = results;
-      await saveState(root, state);
+      await this.saveStateSafe(root, state);
       await this.refreshBrief(sessionID, root, results);
     }
     const lines = results.map((r) => `${r.ok ? "PASS" : "FAIL"} ${r.id}: ${r.summary} (evidence: ${r.evidence})`);
@@ -969,7 +973,7 @@ export class Supervisor {
     if (status === "blocked" && !unblock) return "blocked verdicts require what_would_unblock.";
     const state = await loadState(root);
     state.last_verdict = { status, summary, unblock };
-    await saveState(root, state);
+    await this.saveStateSafe(root, state);
     return status === "met"
       ? "Verdict recorded. The harness will verify the checks before accepting it."
       : "Blocked verdict recorded. The mission will stop after the harness re-runs the checks.";
@@ -977,7 +981,13 @@ export class Supervisor {
 
   // Workers finish in parallel; serialize read-modify-write of state.json so
   // two reports cannot overwrite each other.
+  // ONE write queue per mission. Parallel workers must never interleave a
+  // journal append with a state or progress replace: the read-modify-write
+  // window would lose lines. Reentrant calls (from inside fn) run directly.
   async serialize(root, fn) {
+    // Only calls made from INSIDE fn are reentrant. A concurrent caller must
+    // wait on the queue even while another caller is awaiting its turn.
+    if (this.writeOwners.has(root)) return fn();
     const previous = this.stateQueue.get(root) ?? Promise.resolve();
     let release;
     const current = new Promise((resolve) => {
@@ -985,11 +995,41 @@ export class Supervisor {
     });
     this.stateQueue.set(root, previous.then(() => current));
     await previous;
+    this.writeOwners.add(root);
     try {
       return await fn();
     } finally {
+      this.writeOwners.delete(root);
       release();
     }
+  }
+
+  journal(root, line) {
+    return this.serialize(root, () => appendJournal(root, line));
+  }
+  saveStateSafe(root, state) {
+    return this.serialize(root, () => saveState(root, state));
+  }
+  saveProgressSafe(root, progress) {
+    return this.serialize(root, () => saveProgress(root, progress));
+  }
+  saveTasksSafe(root, tasks) {
+    return this.serialize(root, () => saveTasks(root, tasks));
+  }
+
+  async toolHeartbeat(sessionID, input) {
+    const root = this.rootFor(sessionID);
+    if (!root) return "No active mission.";
+    const worker = this.workers.get(sessionID);
+    const id = Number(input?.id ?? worker?.taskId);
+    if (!Number.isFinite(id) || id < 1) return "task id is required.";
+    return this.serialize(root, async () => {
+      const progress = await loadProgress(root);
+      const state = await loadState(root);
+      const ok = renew(progress, id, Date.now(), Number(state.lease_ms) || 300000);
+      if (ok) await saveProgress(root, progress);
+      return ok ? `Lease for task #${id} renewed.` : `No active lease for task #${id}.`;
+    });
   }
 
   async toolTaskDone(sessionID, input) {
@@ -1023,7 +1063,7 @@ export class Supervisor {
       } else {
         fail(progress, id, `verify check ${task.verify} is red`, Date.now());
       }
-      await Promise.all([saveState(root, state), saveProgress(root, progress)]);
+      await Promise.all([this.saveStateSafe(root, state), this.saveProgressSafe(root, progress)]);
       await appendJournal(
         root,
         credible
@@ -1041,7 +1081,7 @@ export class Supervisor {
     const root = this.rootFor(sessionID);
     if (!root) return "No active mission.";
     if (typeof text !== "string" || !text.trim()) return "text is required.";
-    await appendJournal(root, `agent: ${text.trim().slice(0, 1000)}`);
+    await this.journal(root, `agent: ${text.trim().slice(0, 1000)}`);
     return "Journal entry appended.";
   }
 }

@@ -44,6 +44,7 @@ export function workerPrompt({ task, objective, workspace }) {
     "- Do ONLY this task. Another worker owns the other tasks.",
     "- Use mission_write to create/edit files. Do not run the global checks; the lead verifies them.",
     "- Do not touch files outside the workspace and do not create a mission verdict.",
+    `- Call mission_heartbeat(id=${task.id}) every couple of minutes so your lease is not reclaimed while you work.`,
     `- When finished, call mission_task_done(id=${task.id}, status="done"|"failed", summary="what you did", evidence=["paths/checked"]). A failed report releases the lease so the task can be retried.`,
   ].join("\n");
 }

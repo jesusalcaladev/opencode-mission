@@ -57,6 +57,7 @@ export const initialState = () => ({
   handoff_every_turns: 0,
   last_handoff_turn: 0,
   max_wallclock_min: 0,
+  lease_ms: 300000,
   max_writes: 0,
   writes: 0,
   last_replan_turn: 0,

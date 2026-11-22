@@ -306,6 +306,39 @@ test("supervisor: every successful write is counted toward the ceiling", async (
   }
 });
 
+test("supervisor: heartbeat renews the lease of an assigned task", async () => {
+  const root = await fixture();
+  try {
+    const sup = new Supervisor(fakeCtx());
+    await sup.start("ses_test", root);
+    const progress = await loadProgress(root);
+    progress[0].status = "in_progress";
+    progress[0].lease_until = Date.now() + 1000;
+    await saveProgress(root, progress);
+    const before = progress[0].lease_until;
+    const reply = await sup.toolHeartbeat("ses_test", { id: 1 });
+    assert.match(reply, /renewed/);
+    assert.ok((await loadProgress(root))[0].lease_until > before);
+    sup.dispose();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("supervisor: parallel journal writes never lose a line", async () => {
+  const root = await fixture();
+  try {
+    const sup = new Supervisor(fakeCtx());
+    await sup.start("ses_test", root);
+    await Promise.all(Array.from({ length: 25 }, (_, i) => sup.journal(root, `parallel line ${i}`)));
+    const journal = await readFile(path.join(missionDir(root), "journal.md"), "utf8");
+    for (let i = 0; i < 25; i += 1) assert.match(journal, new RegExp(`parallel line ${i}`));
+    sup.dispose();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("supervisor: a done report with a red verify check is rejected and retried", async () => {
   const root = await fixture();
   try {

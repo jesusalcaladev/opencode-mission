@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 import { STATUS, TASK_STATUS, parseFrontmatter, objectiveOf, normalizeTask } from "../src/mission/state.js";
 import { decideNext, applyTaskResults } from "../src/mission/decide.js";
 import { distill, buildBrief } from "../src/mission/memory.js";
-import { fromTasks, migrateV1, claim, release, fail, expired, retryable, MAX_ATTEMPTS } from "../src/mission/lease.js";
+import { fromTasks, migrateV1, claim, release, renew, fail, expired, retryable, MAX_ATTEMPTS } from "../src/mission/lease.js";
+import { normalizePlan } from "../src/planner.js";
 import { needsReplan, afterReplan, replanPrompt, STALL_TURNS } from "../src/mission/watchdog.js";
 
 test("state: frontmatter numbers and objective extraction", () => {
@@ -97,6 +98,43 @@ test("lease: attempts are bounded", () => {
   }
   assert.equal(retryable(progress, 1), false);
   assert.equal(progress[0].status, TASK_STATUS.FAILED);
+});
+
+test("memory: a decision from turn 5 survives 200 turns of compaction", () => {
+  let memory = "";
+  let summary = "";
+  let journal = "[t5] decided to keep the contract host-agnostic\n";
+  for (let turn = 6; turn <= 200; turn += 1) {
+    journal += `[t${turn}] explored file ${turn} without a decision\n`;
+    if (turn % 4 === 0) {
+      const distilled = distill({ journal, memory, summary });
+      memory = distilled.memory;
+      summary = distilled.summary;
+    }
+  }
+  assert.match(memory, /host-agnostic/);
+  assert.match(summary, /Memory entries/);
+});
+
+test("planner: vacuous criteria are rejected, not treated as checks", () => {
+  for (const cmd of ["true", "exit 0", "echo ok", ":"]) {
+    const raw = JSON.stringify({
+      checks: [{ id: "x", cmd, expect: "exit0" }],
+      tasks: [{ id: 1, subject: "do work", verify: "x" }],
+    });
+    const out = normalizePlan(raw, "o", "/tmp");
+    assert.equal(out.ok, false, `accepted vacuous command: ${cmd}`);
+    assert.match(out.errors.join(" "), /vacuous/);
+  }
+});
+
+test("lease: heartbeat renewal extends the deadline", () => {
+  const now = 1_000_000;
+  const progress = fromTasks([{ id: 1, subject: "a", status: "pending" }], now);
+  claim(progress, 1, "w1", now, 1000);
+  const before = progress[0].lease_until;
+  assert.equal(renew(progress, 1, now + 500, 1000), true);
+  assert.ok(progress[0].lease_until > before);
 });
 
 test("watchdog: a stalled tier-2 mission requests a real re-plan", () => {

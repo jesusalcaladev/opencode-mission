@@ -174,6 +174,7 @@ export async function ensureMission(root, options = {}) {
   if (Number.isFinite(meta.max_failures)) state.max_failures = meta.max_failures;
   if (Number.isFinite(meta.handoff_every_turns)) state.handoff_every_turns = meta.handoff_every_turns;
   if (Number.isFinite(meta.max_wallclock_min)) state.max_wallclock_min = meta.max_wallclock_min;
+  if (Number.isFinite(meta.lease_ms) && meta.lease_ms >= 1000) state.lease_ms = meta.lease_ms;
   state.isolation = typeof meta.isolation === "string" ? meta.isolation : "none";
   await writeJsonAtomic(statePath, state);
 

@@ -62,7 +62,8 @@ The mission ends with `status: aborted` and `finish_reason: stop-file`. Remove
 | `test-erosion` | A test file was edited/deleted after baseline | Review the diff, restore the test, resume |
 | `repeated-execution-failure` | Provider failing after `max_failures` | Fix credentials/quota, resume |
 | `write-ceiling` | Agent writing too much | Raise `max_writes` only if the writes are useful |
-| Task stuck `in_progress` | Worker died before reporting | Wait one idle: the lease expires and is reclaimed |
+| Task stuck `in_progress` | Worker died / stopped sending heartbeats | Wait one idle: the `lease_ms` expires and the task is reclaimed |
+| `lease expired` on a live worker | Worker did not call `mission_heartbeat` | Raise `lease_ms`; the worker prompt already asks for heartbeats |
 | `re-plan applied` | Same approach failed twice | Read `memory.md` to see the discarded approach |
 | `lease expired` in journal | A worker went silent | Expected; the harness retried it |
 
