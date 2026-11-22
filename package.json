@@ -41,7 +41,7 @@
   },
   "scripts": {
     "check": "for f in src/*.js test/*.js; do node --check \"$f\" || exit 1; done",
-    "check": "for f in src/*.js src/mission/*.js test/*.test.js; do node --check \"$f\" || exit 1; done",
+    "check": "for f in src/*.js src/mission/*.js src/supervisor/*.js test/*.test.js; do node --check \"$f\" || exit 1; done",
     "test": "node --test test/*.test.js",
     "test:watch": "node --test --watch test/*.test.js"
   }

@@ -12,7 +12,15 @@ paths under `.mission/`).
 ```text
 src/
   index.js                 OpenCode adapter: /mission commands, tools, hooks
-  supervisor.js            orchestration: verify, dispatch, recover, finish
+  supervisor.js            thin coordinator: constructor + THE main turn loop
+  supervisor/
+    state.js               write queue, bindings, state accessors
+    recovery.js            failures, backoff, model rotation, rescue timer
+    lifecycle.js           start / plan / finish / chain
+    intelligence.js        briefs, memory, re-plan, roles, improve cycle
+    workers.js             worker waves, verification, status
+    tools.js               mission_* tool handlers
+    deps.js / util.js      shared imports and error formatting
   checks.js                criteria runner (shell + timeout + evidence)
   verify.js                test hashing, git checkpoints, worktree isolation
   planner.js               natural language / model JSON -> validated plan

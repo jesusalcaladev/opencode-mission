@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- `src/supervisor.js` shrank from 1400 to ~240 lines. Behavior moved into six
+  cohesive mixins under `src/supervisor/` (state, recovery, lifecycle,
+  intelligence, workers, tools) with a shared dependency barrel. No behavior
+  changed: all 76 tests still pass.
+
 ### Added
 
 - Continuous improvement is **on by default**: after the original criteria are
