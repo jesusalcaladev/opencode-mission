@@ -1,6 +1,6 @@
 // workers mixin — extracted from supervisor.js; behavior unchanged.
 import * as d from "./deps.js";
-const { path, mkdir, readFile, nextStrategy, STATUS, TASK_STATUS, VERSION, ROLE, STAGE, FILES, appendJournal, applyExtension, applyTaskResults, buildBrief, canWrite, chainDecision, claim, consumeExtend, cycleDecision, decideNext, DEFAULT_MAX_EXTENSIONS, distill, ensureMission, expired, extendRequested, fail, fileExists, fromTasks, isLeased, loadCriteria, loadImprovements, loadMemory, loadProgress, loadRoadmap, loadState, loadSummary, loadTasks, markItemDone, nextItem, needsReplan, normalizePlan, objectiveOf, afterReplan, parseFindings, parseRoadmap, rankFindings, readJournal, readJournalTail, release, renew, retryable, roleForStage, saveImprovements, saveMemory, saveProgress, saveRoadmap, saveState, saveSummary, saveTasks, selectTask, stopRequested, writeJsonAtomic, writeTextAtomic, runChecks, checkTestIntegrity, createWorktree, gitCommit, createPlan, fallbackPlan, investigatorPrompt, reportsText, reviewerPrompt, wavesFor, workerBrief, workerPrompt, shortError, REGISTRY_KEY, MAX_NUDGE, AUTO_RESUME_AGE_MS } = d;
+const { allGreen, workspaceStamp, criteriaSignature, upsertFact, renderFacts, loadProjectInstructions, path, mkdir, readFile, nextStrategy, STATUS, TASK_STATUS, VERSION, ROLE, STAGE, FILES, appendJournal, applyExtension, applyTaskResults, buildBrief, canWrite, chainDecision, claim, consumeExtend, cycleDecision, decideNext, DEFAULT_MAX_EXTENSIONS, distill, ensureMission, expired, extendRequested, fail, fileExists, fromTasks, isLeased, loadCriteria, loadImprovements, loadMemory, loadProgress, loadRoadmap, loadState, loadSummary, loadTasks, markItemDone, nextItem, needsReplan, normalizePlan, objectiveOf, afterReplan, parseFindings, parseRoadmap, rankFindings, readJournal, readJournalTail, release, renew, retryable, roleForStage, saveImprovements, saveMemory, saveProgress, saveRoadmap, saveState, saveSummary, saveTasks, selectTask, stopRequested, writeJsonAtomic, writeTextAtomic, runChecks, checkTestIntegrity, createWorktree, gitCommit, gitRevert, createPlan, fallbackPlan, investigatorPrompt, reportsText, reviewerPrompt, wavesFor, workerBrief, workerPrompt, shortError, REGISTRY_KEY, MAX_NUDGE, AUTO_RESUME_AGE_MS } = d;
 
 export const workers = {
   waitWithTimeout(sessionID, ms) {
@@ -27,7 +27,7 @@ export const workers = {
     const waves = wavesFor(open, this.maxWorkers);
     if (!waves.length) return { ran: false };
     const objective = objectiveOf(await this.readMission(root));
-    const workerModel = this.options.model ?? this.pickFreeModel(await this.modelCatalog());
+    const workerModel = this.modelForRole(ROLE.IMPLEMENTER) ?? this.pickFreeModel(await this.modelCatalog());
     let ran = false;
 
     for (const wave of waves) {
@@ -113,14 +113,18 @@ export const workers = {
   },
 
   async verify(root, workRoot) {
-    const [criteria, stored] = await Promise.all([loadCriteria(root), loadTasks(root)]);
-    let results = await runChecks(workRoot, criteria);
+    const [criteria, stored, state] = await Promise.all([loadCriteria(root), loadTasks(root), loadState(root)]);
+    const stamp = await workspaceStamp(workRoot);
+    const cache = state.check_cache;
+    let results = await runChecks(workRoot, criteria, { stamp, cache });
     const applied = applyTaskResults(stored, results);
     let tasks = applied.tasks;
     if (applied.changed) {
       await this.saveTasksSafe(root, tasks);
-      results = await runChecks(workRoot, criteria);
+      results = await runChecks(workRoot, criteria, { stamp, cache: null });
     }
+    state.check_cache = { stamp, signature: criteriaSignature(criteria.checks), results };
+    await saveState(root, state);
     return { results, tasks };
   },
 
@@ -166,8 +170,13 @@ export const workers = {
     const tasks = await loadTasks(root);
     const task = selectTask(tasks);
     const green = state.last_checks.filter((r) => r.ok).length;
+    const done = tasks.filter((t) => t.status === "completed").length;
+    const pct = state.last_checks.length > 0 ? green / state.last_checks.length : tasks.length > 0 ? done / tasks.length : 0;
+    const filled = Math.max(0, Math.min(10, Math.round(pct * 10)));
+    const bar = "▓".repeat(filled) + "░".repeat(10 - filled);
     return [
       `Mission: ${root}`,
+      `Progress: ${bar} ${green}/${state.last_checks.length} checks · ${done}/${tasks.length} tasks · improve cycles ${state.improve_cycles ?? 0}`,
       `Status: ${state.status} · turn ${state.turn}/${state.max_turns} · cost $${state.cost_usd.toFixed(2)}/$${state.budget_usd.toFixed(2)}`,
       `Checks: ${green}/${state.last_checks.length} green · tasks: ${tasks.filter((t) => t.status === "completed").length}/${tasks.length}`,
       `Next task: ${task ? `#${task.id} ${task.subject}` : "none"}`,

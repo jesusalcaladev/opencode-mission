@@ -1,6 +1,6 @@
 // intelligence mixin — extracted from supervisor.js; behavior unchanged.
 import * as d from "./deps.js";
-const { path, mkdir, readFile, nextStrategy, parseReview, replanPrompt, stageFor, STATUS, TASK_STATUS, VERSION, ROLE, STAGE, FILES, appendJournal, applyExtension, applyTaskResults, buildBrief, canWrite, chainDecision, claim, consumeExtend, cycleDecision, decideNext, DEFAULT_MAX_EXTENSIONS, distill, ensureMission, expired, extendRequested, fail, fileExists, fromTasks, isLeased, loadCriteria, loadImprovements, loadMemory, loadProgress, loadRoadmap, loadState, loadSummary, loadTasks, markItemDone, nextItem, needsReplan, normalizePlan, objectiveOf, afterReplan, parseFindings, parseRoadmap, rankFindings, readJournal, readJournalTail, release, renew, retryable, roleForStage, saveImprovements, saveMemory, saveProgress, saveRoadmap, saveState, saveSummary, saveTasks, selectTask, stopRequested, writeJsonAtomic, writeTextAtomic, runChecks, checkTestIntegrity, createWorktree, gitCommit, createPlan, fallbackPlan, investigatorPrompt, reportsText, reviewerPrompt, wavesFor, workerBrief, workerPrompt, shortError, REGISTRY_KEY, MAX_NUDGE, AUTO_RESUME_AGE_MS } = d;
+const { allGreen, workspaceStamp, criteriaSignature, upsertFact, renderFacts, loadProjectInstructions, path, mkdir, readFile, nextStrategy, parseReview, replanPrompt, stageFor, STATUS, TASK_STATUS, VERSION, ROLE, STAGE, FILES, appendJournal, applyExtension, applyTaskResults, buildBrief, canWrite, chainDecision, claim, consumeExtend, cycleDecision, decideNext, DEFAULT_MAX_EXTENSIONS, distill, ensureMission, expired, extendRequested, fail, fileExists, fromTasks, isLeased, loadCriteria, loadImprovements, loadMemory, loadProgress, loadRoadmap, loadState, loadSummary, loadTasks, markItemDone, nextItem, needsReplan, normalizePlan, objectiveOf, afterReplan, parseFindings, parseRoadmap, rankFindings, readJournal, readJournalTail, release, renew, retryable, roleForStage, saveImprovements, saveMemory, saveProgress, saveRoadmap, saveState, saveSummary, saveTasks, selectTask, stopRequested, writeJsonAtomic, writeTextAtomic, runChecks, checkTestIntegrity, createWorktree, gitCommit, gitRevert, createPlan, fallbackPlan, investigatorPrompt, reportsText, reviewerPrompt, wavesFor, workerBrief, workerPrompt, shortError, REGISTRY_KEY, MAX_NUDGE, AUTO_RESUME_AGE_MS } = d;
 
 export const intelligence = {
   async readMission(root) {
@@ -15,7 +15,7 @@ export const intelligence = {
   },
 
   async refreshBrief(sessionID, root, results) {
-    const [missionText, state, tasks, journal, memory, summary, progress] = await Promise.all([
+    const [missionText, state, tasks, journal, memory, summary, progress, instructions] = await Promise.all([
       this.readMission(root),
       loadState(root),
       loadTasks(root),
@@ -23,8 +23,9 @@ export const intelligence = {
       loadMemory(root),
       loadSummary(root),
       loadProgress(root),
+      loadProjectInstructions(null, root),
     ]);
-    this.briefs.set(sessionID, buildBrief({ root, missionText, state, tasks, journal, memory, summary, progress, results }));
+    this.briefs.set(sessionID, buildBrief({ root, missionText, state, tasks, journal, memory, summary, progress, instructions, facts: state.facts ?? [], results }));
   },
 
   async compactMemory(root, state) {
@@ -126,6 +127,8 @@ export const intelligence = {
     const progress = await loadProgress(root);
     progress.push({ id, subject, status: TASK_STATUS.PENDING, owner: null, attempts: 0, lease_until: 0, last_error: "", verify: "" });
     state.improve_cycles = (state.improve_cycles ?? 0) + 1;
+    state.active_improve_id = id;
+    state.improve_revert_sha = state.last_commit ?? "";
     state.stage = STAGE.IMPLEMENT;
     state.clean_audit_rounds = 0;
     delete state.stage_reports.auditor;
@@ -141,7 +144,7 @@ export const intelligence = {
       parentID: sessionID,
       title: `mission ${role}`,
       location: { directory: this.ctx.location.directory },
-      model: this.options.model ?? this.pickFreeModel(await this.modelCatalog()),
+      model: this.modelForRole(role) ?? this.pickFreeModel(await this.modelCatalog()),
     });
     const id = created?.id ?? created?.data?.id;
     if (!id) return null;

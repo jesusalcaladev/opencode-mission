@@ -66,9 +66,12 @@ export async function isGitRepo(root) {
   }
 }
 
-export async function gitCommit(root, message) {
+/// `paths` MUST be scoped to files the mission owns. Never `git add -A`.
+export async function gitCommit(root, message, paths = []) {
   if (!(await isGitRepo(root))) return { ok: false, reason: "not a git repository" };
-  const add = await runCommand("git add -A", root, 15000);
+  if (paths.length === 0) return { ok: false, reason: "no mission-owned paths to commit" };
+  const quoted = paths.map((p) => `'${String(p).replace(/'/g, "'\\''")}'`).join(" ");
+  const add = await runCommand(`git add -- ${quoted}`, root, 15000);
   if (add.code !== 0) return { ok: false, reason: `git add failed: ${add.stderr.trim().slice(0, 200)}` };
   const commit = await runCommand(`git commit --no-gpg-sign -m ${JSON.stringify(message)}`, root, 30000);
   const text = `${commit.stdout}\n${commit.stderr}`;
@@ -78,6 +81,14 @@ export async function gitCommit(root, message) {
   }
   const head = await runCommand("git rev-parse --short HEAD", root, 5000);
   return { ok: true, sha: head.stdout.trim(), reason: "committed" };
+}
+
+/// Undo a verified checkpoint without touching later unrelated work.
+export async function gitRevert(root, sha) {
+  if (!sha || !(await isGitRepo(root))) return { ok: false, reason: "nothing to revert" };
+  const result = await runCommand(`git revert --no-edit ${JSON.stringify(sha)}`, root, 30000);
+  const text = `${result.stdout}\n${result.stderr}`;
+  return result.code === 0 ? { ok: true, sha } : { ok: false, reason: text.trim().slice(0, 200) };
 }
 
 function safeRef(value) {

@@ -35,15 +35,16 @@ test("gitCommit commits a verified unit and is a no-op when nothing changed", as
   const root = await mkdtemp(path.join(os.tmpdir(), "mission-git-"));
   try {
     assert.equal(await isGitRepo(root), false);
-    assert.equal((await gitCommit(root, "no repo")).ok, false);
+    assert.equal((await gitCommit(root, "no repo", ["a.js"])).ok, false);
 
     await runCommand("git init -q", root, 10000);
     assert.equal(await isGitRepo(root), true);
     await writeFile(path.join(root, "cli.js"), "console.log('1.0.0')\n");
-    const first = await gitCommit(root, "mission(test): turn 1");
+    assert.equal((await gitCommit(root, "unscoped", [])).ok, false);
+    const first = await gitCommit(root, "mission(test): turn 1", ["cli.js"]);
     assert.equal(first.ok, true);
     assert.ok(first.sha, "first commit should have a sha");
-    const second = await gitCommit(root, "mission(test): turn 2");
+    const second = await gitCommit(root, "mission(test): turn 2", ["cli.js"]);
     assert.equal(second.ok, true);
     assert.equal(second.sha, null);
   } finally {
@@ -56,7 +57,7 @@ test("createWorktree isolates the mission workspace", async () => {
   try {
     await runCommand("git init -q", root, 10000);
     await writeFile(path.join(root, "seed.txt"), "seed\n");
-    await gitCommit(root, "seed");
+    await gitCommit(root, "seed", ["seed.txt"]);
     const wt = await createWorktree(root, "demo");
     assert.equal(wt.ok, true, wt.reason);
     assert.equal((await stat(wt.root)).isDirectory(), true);

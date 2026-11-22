@@ -154,6 +154,7 @@ designed to be ported to other harnesses (a zode implementation is planned).
 | `mission_task_done` | Worker completion report (harness still verifies) |
 | `mission_heartbeat` | Renew the worker's task lease while working |
 | `mission_report` | Store read-only stage findings (investigator/reviewer) |
+| `mission_fact` | Store a durable fact that survives compaction |
 | `mission_log` | Append to the durable journal |
 
 ## Configuration
@@ -165,6 +166,8 @@ designed to be ported to other harnesses (a zode implementation is planned).
 | `model` | auto | `{providerID, id}` forced for planner, lead and workers |
 | `plannerModel` | auto | Override for the planning call only |
 | `fallbackModel` | auto | Override used on quota errors |
+| `fastModel` | auto | Model for read-only roles (investigator/reviewer) |
+| `modelsByRole` | unset | Per-role model map, e.g. `{ "reviewer": {...} }` |
 | `missionsRoot` | `<cwd>/missions` | Where generated mission workspaces live |
 | `maxWorkers` | `3` | Maximum parallel sub-agents per wave |
 | `enableWorkers` | `true` | Set to `false` for single-agent runs |

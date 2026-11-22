@@ -13,7 +13,7 @@ const {
   normalizePlan, objectiveOf, afterReplan, parseFindings, parseRoadmap, rankFindings,
   readJournal, readJournalTail, release, renew, retryable, roleForStage, saveImprovements,
   saveMemory, saveProgress, saveRoadmap, saveState, saveSummary, saveTasks, selectTask,
-  stopRequested, writeTextAtomic, runChecks, checkTestIntegrity, createWorktree, gitCommit,
+  stopRequested, writeTextAtomic, runChecks, checkTestIntegrity, createWorktree, gitCommit, gitRevert,
   createPlan, fallbackPlan, investigatorPrompt, reportsText, reviewerPrompt, wavesFor,
   workerBrief, workerPrompt, shortError,
 } = d;
@@ -88,6 +88,26 @@ export class Supervisor {
       }
 
       let { results, tasks } = await this.verify(root, workRoot);
+
+      // An improvement that breaks verification is undone automatically; the
+      // mission continues from the last known-good checkpoint.
+      if (state.active_improve_id && !allGreen(results) && state.improve_revert_sha) {
+        const reverted = await gitRevert(workRoot, state.improve_revert_sha);
+        const note = reverted.ok
+          ? `improve #${state.active_improve_id} reverted: ${state.improve_revert_sha}`
+          : `improve #${state.active_improve_id} revert failed: ${reverted.reason}`;
+        await this.journal(root, note);
+        if (reverted.ok) {
+          const reopened = await loadTasks(root);
+          const target = reopened.find((t) => t.id === state.active_improve_id);
+          if (target) target.status = TASK_STATUS.FAILED;
+          await saveTasks(root, reopened);
+        }
+        state.active_improve_id = 0;
+        state.improve_revert_sha = "";
+        await saveState(root, state);
+      }
+
       let anyProgress = this.recordTurn(state, results, tasks);
       const cost = await this.sessionCost(sessionID);
       if (cost !== null) state.cost_usd = cost;
@@ -150,8 +170,9 @@ export class Supervisor {
       }
 
       if (anyProgress) {
+        const owned = [...new Set(tasks.flatMap((t) => t.files ?? []))];
         const commit = await this.serialize(root, () =>
-          gitCommit(workRoot, `mission(${state.id ?? "mission"}): turn ${state.turn} — verified progress`),
+          gitCommit(workRoot, `mission(${state.id ?? "mission"}): turn ${state.turn} — verified progress`, owned),
         );
         if (commit.ok) {
           state.last_commit = commit.sha;

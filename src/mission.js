@@ -23,6 +23,8 @@ import { buildBrief, distill, MEMORY_BUDGET } from "./mission/memory.js";
 import { needsReplan, replanPrompt, afterReplan, STALL_TURNS } from "./mission/watchdog.js";
 import { ROLE, STAGE, canWrite, parseReview, stageFor, roleForStage, MAX_REVIEW_ATTEMPTS } from "./mission/roles.js";
 import { parseFindings, rankFindings, cycleDecision, worthImproving } from "./mission/improve.js";
+import { loadProjectInstructions, MAX_INSTRUCTION_CHARS } from "./mission/instructions.js";
+import { upsertFact, renderFacts, MAX_FACTS } from "./mission/facts.js";
 import {
   DEFAULT_MAX_EXTENSIONS,
   EXTEND_TURNS,
@@ -82,6 +84,11 @@ export {
   rankFindings,
   cycleDecision,
   worthImproving,
+  loadProjectInstructions,
+  MAX_INSTRUCTION_CHARS,
+  upsertFact,
+  renderFacts,
+  MAX_FACTS,
   DEFAULT_MAX_EXTENSIONS,
   EXTEND_TURNS,
   EXTEND_MINUTES,

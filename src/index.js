@@ -38,6 +38,8 @@ export default Plugin.define({
   async setup(ctx) {
     const supervisor = new Supervisor(ctx, {
       model: ctx.options?.model,
+      fastModel: ctx.options?.fastModel,
+      modelsByRole: ctx.options?.modelsByRole,
       fallbackModel: ctx.options?.fallbackModel,
       notifyUrl: ctx.options?.notifyUrl,
       plannerModel: ctx.options?.plannerModel,
@@ -159,6 +161,13 @@ export default Plugin.define({
           input: obj({ id: { type: "integer" } }),
           options: { namespace: "mission", codemode: false },
           execute: async (input, toolCtx) => ({ content: await supervisor.toolHeartbeat(toolCtx.sessionID, input) }),
+        });
+        editor.add({
+          name: "fact",
+          description: "Store a durable fact (kind, subject, text) that survives context compaction and appears in every brief.",
+          input: obj({ kind: str, subject: str, text: str }, ["subject", "text"]),
+          options: { namespace: "mission", codemode: false },
+          execute: async (input, toolCtx) => ({ content: await supervisor.toolFact(toolCtx.sessionID, input) }),
         });
         editor.add({
           name: "log",

@@ -1,18 +1,19 @@
-// Criteria runner: executes the mission's checks with a timeout and writes evidence.
-// This is the harness side of "done": the model's verdict is never trusted over a red check.
+// Criteria runner: parallel execution, workspace fingerprint caching, evidence.
+// The model's verdict is never trusted over a red check.
 
 import { spawn } from "node:child_process";
-import { mkdir, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { missionDir, FILES } from "./mission.js";
 
 const MAX_OUTPUT = 64 * 1024;
+const SKIP = new Set([".git", ".mission", "node_modules", "zig-cache", ".zig-cache", "zig-out", "dist", "build"]);
 
 export function evaluateExpect(expect, { code, stdout }) {
   const spec = String(expect ?? "exit0");
-  if (spec.startsWith("contains:")) {
-    const needle = spec.slice("contains:".length);
-    return code === 0 && stdout.includes(needle);
+  if (spec.startsWith("contains:") && spec.length > 9) {
+    return code === 0 && stdout.includes(spec.slice(9));
   }
   return code === 0;
 }
@@ -23,66 +24,95 @@ export function runCommand(cmd, cwd, timeoutMs) {
     let stdout = "";
     let stderr = "";
     let settled = false;
-    const timer = setTimeout(() => {
+    const finish = (code, extra = "") => {
       if (settled) return;
       settled = true;
+      clearTimeout(timer);
+      resolve({ code, stdout, stderr: stderr + extra, timedOut: code === 124 });
+    };
+    const timer = setTimeout(() => {
       child.kill("SIGKILL");
-      resolve({ code: 124, stdout, stderr: `${stderr}\n[timed out after ${timeoutMs}ms]`, timedOut: true });
+      finish(124, "\n[timed out]");
     }, timeoutMs);
-
     const collect = (chunk, key) => {
-      if (settled) return;
       const text = chunk.toString("utf8");
-      if (key === "stdout") {
-        stdout = (stdout + text).slice(0, MAX_OUTPUT);
-      } else {
-        stderr = (stderr + text).slice(0, MAX_OUTPUT);
-      }
+      if (key === "stdout") stdout = (stdout + text).slice(0, MAX_OUTPUT);
+      else stderr = (stderr + text).slice(0, MAX_OUTPUT);
     };
     child.stdout.on("data", (c) => collect(c, "stdout"));
     child.stderr.on("data", (c) => collect(c, "stderr"));
-    child.on("error", (err) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve({ code: 127, stdout, stderr: `${stderr}\n${err.message}`, timedOut: false });
-    });
-    child.on("close", (code) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve({ code: code ?? 1, stdout, stderr, timedOut: false });
-    });
+    child.on("error", (err) => finish(127, `\n${err.message}`));
+    child.on("close", (code) => finish(code ?? 1));
   });
 }
 
-export async function runChecks(root, criteria) {
+/// A cheap fingerprint of the workspace: file paths + mtimes, ignoring build noise.
+/// Used to skip criteria that cannot have changed since the last verified run.
+export async function workspaceStamp(root) {
+  const hash = createHash("sha256");
+  let entries = [];
+  try {
+    entries = await readdir(root, { recursive: true, withFileTypes: true });
+  } catch {
+    return "missing";
+  }
+  const files = entries
+    .filter((e) => e.isFile() && !e.name.split(path.sep).some((part) => SKIP.has(part)))
+    .map((e) => path.join(e.parentPath ?? root, e.name));
+  files.sort();
+  for (const file of files.slice(0, 20_000)) {
+    try {
+      const info = await stat(file);
+      hash.update(path.relative(root, file));
+      hash.update(String(info.mtimeMs));
+      hash.update(String(info.size));
+    } catch {
+      // A file deleted during the scan is a change; the next stamp will differ.
+    }
+  }
+  return hash.digest("hex");
+}
+
+export function criteriaSignature(checks) {
+  return createHash("sha256")
+    .update(JSON.stringify((checks ?? []).map((c) => [c.id, c.cmd, c.expect, c.timeout_ms])))
+    .digest("hex");
+}
+
+export async function runChecks(root, criteria, options = {}) {
+  const checks = Array.isArray(criteria?.checks) ? criteria.checks : [];
+  if (checks.length === 0) return [];
   const evidenceDir = path.join(missionDir(root), FILES.evidence);
   await mkdir(evidenceDir, { recursive: true });
-  const checks = Array.isArray(criteria?.checks) ? criteria.checks : [];
-  const results = [];
 
-  for (const check of checks) {
-    const timeoutMs = Number.isFinite(check.timeout_ms) ? check.timeout_ms : 30000;
-    const started = Date.now();
-    const run = await runCommand(check.cmd, root, timeoutMs);
-    const ms = Date.now() - started;
-    const ok = evaluateExpect(check.expect, run);
-    const evidence = path.join(evidenceDir, `${check.id}.txt`);
-    await writeFile(
-      evidence,
-      `[check] ${check.id}\n[cmd] ${check.cmd}\n[exit] ${run.code}\n[ms] ${ms}\n[expect] ${check.expect ?? "exit0"}\n[ok] ${ok}\n\n--- stdout ---\n${run.stdout}\n--- stderr ---\n${run.stderr}\n`,
-      "utf8",
-    );
-    const summary = (run.stdout.trim() || run.stderr.trim() || `exit ${run.code}`).split("\n")[0].slice(0, 200);
-    results.push({
-      id: check.id,
-      ok,
-      exit: run.code,
-      ms,
-      summary,
-      evidence: path.relative(root, evidence),
-    });
+  const stamp = options.stamp ?? (await workspaceStamp(root));
+  const signature = criteriaSignature(checks);
+  const cache = options.cache;
+  if (cache && cache.stamp === stamp && cache.signature === signature &&
+      Array.isArray(cache.results) && cache.results.length === checks.length) {
+    return cache.results;
   }
+
+  const limit = Math.max(1, Math.min(8, options.maxParallel ?? 3));
+  const results = new Array(checks.length);
+  let next = 0;
+  async function worker() {
+    while (next < checks.length) {
+      const index = next++;
+      const check = checks[index];
+      const started = Date.now();
+      const run = await runCommand(check.cmd, root, Number.isFinite(check.timeout_ms) ? check.timeout_ms : 30000);
+      const ok = evaluateExpect(check.expect, run);
+      const summary = (run.stdout.trim() || run.stderr.trim() || `exit ${run.code}`).split("\n")[0].slice(0, 200);
+      const evidence = path.join(evidenceDir, `${check.id}.txt`);
+      await writeFile(
+        evidence,
+        `[check] ${check.id}\n[cmd] ${check.cmd}\n[exit] ${run.code}\n[ms] ${Date.now() - started}\n[expect] ${check.expect ?? "exit0"}\n[ok] ${ok}\n\n--- stdout ---\n${run.stdout}\n--- stderr ---\n${run.stderr}\n`,
+        "utf8",
+      );
+      results[index] = { id: check.id, ok, exit: run.code, ms: Date.now() - started, summary, evidence: path.relative(root, evidence) };
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, checks.length) }, () => worker()));
   return results;
 }

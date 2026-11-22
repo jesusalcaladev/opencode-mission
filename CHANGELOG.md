@@ -6,6 +6,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Parallel criteria execution (`maxParallel`, default 3) with workspace-fingerprint
+  caching: unchanged work reuses the last verified results instead of re-running.
+- Model per role: `fastModel` for read-only roles, `model` for implementers, and
+  `modelsByRole` overrides. `AGENTS.md`/`CLAUDE.md` hierarchy is injected into every brief.
+- Structured `mission_fact` store that survives compaction, plus a progress bar in
+  `/mission status`.
+
+### Fixed
+
+- `gitCommit` no longer uses `git add -A`: only mission-owned `files` are staged.
+  Added `gitRevert` and automatic rollback of improvement cycles that break checks.
+
 ### Changed
 
 - `src/supervisor.js` shrank from 1400 to ~240 lines. Behavior moved into six

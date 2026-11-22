@@ -2,10 +2,11 @@
 // small without changing what the methods import.
 
 export { default as path } from "node:path";
+
 export { mkdir, readFile } from "node:fs/promises";
 export * from "../mission.js";
-export { runChecks } from "../checks.js";
-export { checkTestIntegrity, createWorktree, gitCommit } from "../verify.js";
+export { runChecks, workspaceStamp, criteriaSignature } from "../checks.js";
+export { checkTestIntegrity, createWorktree, gitCommit, gitRevert } from "../verify.js";
 export { createPlan, fallbackPlan, normalizePlan } from "../planner.js";
 export {
   investigatorPrompt,
