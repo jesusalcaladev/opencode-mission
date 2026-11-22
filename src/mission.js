@@ -20,6 +20,7 @@ import {
 } from "./mission/state.js";
 import { selectTask, applyTaskResults, nextStrategy, decideNext } from "./mission/decide.js";
 import { buildBrief, distill, MEMORY_BUDGET } from "./mission/memory.js";
+import { needsReplan, replanPrompt, afterReplan, STALL_TURNS } from "./mission/watchdog.js";
 import {
   migrateV1,
   fromTasks,
@@ -53,6 +54,10 @@ export {
   buildBrief,
   distill,
   MEMORY_BUDGET,
+  needsReplan,
+  replanPrompt,
+  afterReplan,
+  STALL_TURNS,
   migrateV1,
   fromTasks,
   toTasks,

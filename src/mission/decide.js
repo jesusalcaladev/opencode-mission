@@ -55,6 +55,9 @@ export function decideNext({ state, results, tasks, verdict, stopFile, now = Dat
     return { type: "stop", reason: "budget" };
   }
   if (state.turn >= state.max_turns) return { type: "stop", reason: "max-turns" };
+  if (Number.isFinite(state.max_writes) && state.max_writes > 0 && (state.writes ?? 0) >= state.max_writes) {
+    return { type: "stop", reason: "write-ceiling" };
+  }
   if (verdict?.status === "blocked") return { type: "stop", reason: "blocked", unblock: verdict.unblock ?? "" };
   const green = results.length > 0 && results.every((r) => r.ok);
   if (green && tasks.every((t) => t.status === TASK_STATUS.COMPLETED)) return { type: "complete" };

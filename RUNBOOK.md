@@ -1,0 +1,77 @@
+# Runbook: unattended missions
+
+## Start
+
+```text
+/mission start Build a CLI with three tests and a README explaining it
+```
+
+Use a **path** instead of prose to resume a pre-authored mission:
+
+```text
+/mission resume ./missions/build-a-cli-1795312553
+```
+
+## Budgets that stop a run
+
+Set these in `.mission/mission.md` frontmatter (the planner writes defaults):
+
+| Key | Effect |
+| --- | --- |
+| `max_turns` | Lead turns before `max-turns` |
+| `budget_usd` | Stops when the provider reports cost >= this |
+| `max_wallclock_min` | Hard wall-clock deadline from `started_at` |
+| `max_writes` | Successful `mission_write` calls before `write-ceiling` |
+| `max_failures` | Consecutive failed lead turns before abort |
+
+If the model is unpriced, cost is $0: rely on turns, wall-clock and writes.
+
+## Watch it
+
+```text
+/mission status
+```
+
+For a scripted check, read the durable files directly:
+
+```sh
+cat <workspace>/.mission/state.json      # turn, cost, writes, status
+cat <workspace>/.mission/progress.json   # task leases, attempts, last_error
+tail -20 <workspace>/.mission/journal.md # every transition, in order
+cat <workspace>/.mission/memory.md       # distilled decisions the model sees
+```
+
+`journal.md` is the audit log. `memory.md` is what the model actually receives;
+if a decision disappeared, look there first.
+
+## Stop, pause, resume
+
+Create `STOP` to halt at the next idle boundary:
+
+```sh
+touch <workspace>/.mission/STOP
+```
+
+The mission ends with `status: aborted` and `finish_reason: stop-file`. Remove
+`STOP` and run `/mission resume <workspace>` to continue.
+
+## Common symptoms
+
+| Symptom | Meaning | Action |
+| --- | --- | --- |
+| `test-erosion` | A test file was edited/deleted after baseline | Review the diff, restore the test, resume |
+| `repeated-execution-failure` | Provider failing after `max_failures` | Fix credentials/quota, resume |
+| `write-ceiling` | Agent writing too much | Raise `max_writes` only if the writes are useful |
+| Task stuck `in_progress` | Worker died before reporting | Wait one idle: the lease expires and is reclaimed |
+| `re-plan applied` | Same approach failed twice | Read `memory.md` to see the discarded approach |
+| `lease expired` in journal | A worker went silent | Expected; the harness retried it |
+
+## Long-run checklist
+
+- Commit checkpoints are created only on verified progress. Review `git log`.
+- `ZODE_MISSION_AGENT` can point to any CLI that takes the prompt as its last
+  argument; use it to test the loop without spending provider credits.
+- `enableWorkers: false` in plugin options gives a single-agent run for debugging.
+- `maxWorkers` above 3 only helps when tasks have disjoint `files` lists.
+- On restart, the plugin auto-resumes a running mission whose last prompt is
+  older than 30 s. A reload during an active turn does not double-prompt.

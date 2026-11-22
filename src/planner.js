@@ -15,7 +15,7 @@ export function planPrompt(objective, workspace) {
     '  "objective": "one precise sentence restating the goal",',
     '  "checks": [{"id":"short_id","cmd":"shell command","expect":"exit0 | contains:text","timeout_ms":30000}],',
     '  "tasks": [{"id":1,"subject":"short imperative","files":["relative/path.js"],"verify":"check_id","blocked_by":[]}],',
-    '  "settings": {"max_turns":16,"budget_usd":5,"handoff_every_turns":4,"max_failures":3,"isolation":"none"}',
+    '  "settings": {"max_turns":16,"budget_usd":5,"max_wallclock_min":120,"max_writes":200,"handoff_every_turns":4,"max_failures":3,"isolation":"none"}',
     '}',
     "",
     "HARD RULES",
@@ -140,6 +140,8 @@ export function normalizePlan(raw, objective, workspace) {
     budget_usd: clamp(s.budget_usd, 0.1, 100, 5),
     handoff_every_turns: clamp(s.handoff_every_turns, 0, 20, 4),
     max_failures: clamp(s.max_failures, 1, 8, 3),
+    max_wallclock_min: clamp(s.max_wallclock_min, 0, 1440, 0),
+    max_writes: clamp(s.max_writes, 0, 10_000, 0),
     isolation: s.isolation === "worktree" ? "worktree" : "none",
   };
 
@@ -208,7 +210,7 @@ export function fallbackPlan(objective, workspace) {
     workspace,
     checks,
     tasks,
-    settings: { max_turns: 16, budget_usd: 5, handoff_every_turns: 4, max_failures: 3, isolation: "none" },
+    settings: { max_turns: 16, budget_usd: 5, max_wallclock_min: 0, max_writes: 0, handoff_every_turns: 4, max_failures: 3, isolation: "none" },
   };
 }
 

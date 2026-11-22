@@ -10,7 +10,7 @@ import path from "node:path";
 import { mkdir, readFile } from "node:fs/promises";
 import { runChecks } from "./checks.js";
 import { checkTestIntegrity, createWorktree, gitCommit } from "./verify.js";
-import { createPlan } from "./planner.js";
+import { createPlan, normalizePlan } from "./planner.js";
 import { reportsText, wavesFor, workerBrief, workerPrompt } from "./team.js";
 import {
   STATUS,
@@ -34,7 +34,10 @@ import {
   loadSummary,
   loadTasks,
   nextStrategy,
+  needsReplan,
   objectiveOf,
+  afterReplan,
+  replanPrompt,
   readJournal,
   readJournalTail,
   release,
@@ -384,6 +387,8 @@ export class Supervisor {
       `stall_after_turns: 2`,
       `handoff_every_turns: ${s.handoff_every_turns}`,
       `max_failures: ${s.max_failures}`,
+      `max_wallclock_min: ${s.max_wallclock_min ?? 0}`,
+      `max_writes: ${s.max_writes ?? 0}`,
       `isolation: ${s.isolation}`,
       "---",
       plan.objective,
@@ -405,6 +410,8 @@ export class Supervisor {
       turn: 0,
       cost_usd: 0,
       failures: 0,
+      writes: 0,
+      last_replan_turn: 0,
       best_green: 0,
       tasks_done: 0,
       last_checks: [],
@@ -527,6 +534,52 @@ export class Supervisor {
       loadProgress(root),
     ]);
     this.briefs.set(sessionID, buildBrief({ root, missionText, state, tasks, journal, memory, summary, progress, results }));
+  }
+
+  // A stalled mission gets a NEW plan, not a louder prompt. The harness applies
+  // it only after it passes the same validation as the initial plan.
+  async maybeReplan(root, state, results, tasks) {
+    if (!needsReplan(state) || !this.options.generate) return false;
+    const [missionText, memory, journal] = await Promise.all([
+      this.readMission(root),
+      loadMemory(root),
+      readJournalTail(root, 1500),
+    ]);
+    const prompt = replanPrompt({
+      objective: objectiveOf(missionText),
+      memory,
+      journalTail: journal,
+      results,
+      tasks,
+    });
+    let text = "";
+    try {
+      const out = await this.options.generate({ prompt, model: await this.pickPlannerModel() });
+      text = typeof out === "string" ? out : (out?.text ?? out?.data?.text ?? "");
+    } catch (err) {
+      await appendJournal(root, `re-plan request failed: ${shortError(err)}`);
+      return false;
+    }
+    const parsed = normalizePlan(text, objectiveOf(missionText), root);
+    if (!parsed.ok) {
+      await appendJournal(root, `re-plan rejected: ${parsed.errors.join("; ")}`);
+      return false;
+    }
+    const planned = parsed.plan.tasks.map((t) => ({ ...t, status: TASK_STATUS.PENDING }));
+    const dir = path.join(root, ".mission");
+    await Promise.all([
+      writeJsonAtomic(path.join(dir, "criteria.json"), { version: VERSION, checks: parsed.plan.checks }),
+      writeJsonAtomic(path.join(dir, "tasks.json"), { version: VERSION, tasks: planned }),
+      saveProgress(root, fromTasks(planned)),
+    ]);
+    const next = afterReplan(state, state.turn);
+    Object.assign(state, next);
+    await saveState(root, state);
+    await appendJournal(
+      root,
+      `re-plan applied at turn ${state.turn}: ${parsed.plan.checks.length} checks, ${planned.length} tasks (strategy reset to 1)`,
+    );
+    return true;
   }
 
   // Distill the raw journal into bounded memory. Called on a schedule, not on
@@ -747,6 +800,15 @@ export class Supervisor {
       await saveState(root, state);
       await this.compactMemory(root, state);
 
+      if (decision.type === "continue") {
+        const replanned = await this.maybeReplan(root, state, results, tasks);
+        if (replanned) {
+          ({ results, tasks } = await this.verify(root, workRoot));
+          decision = decideNext({ state, results, tasks, verdict: null, stopFile: await stopRequested(root) });
+          await this.journalTurn(root, state, results, tasks, decision, "after replan");
+        }
+      }
+
       if (decision.type === "continue" && this.enableWorkers) {
         const outcome = await this.runWorkers(sessionID, root, state, tasks, workRoot);
         if (outcome.ran) {
@@ -872,6 +934,11 @@ export class Supervisor {
     const target = path.resolve(workRoot, rel);
     if (target !== workRoot && !target.startsWith(`${workRoot}${path.sep}`)) return `Refusing to write outside the mission workspace: ${rel}`;
     await writeTextAtomic(target, content);
+    await this.serialize(root, async () => {
+      const fresh = await loadState(root);
+      fresh.writes = (fresh.writes ?? 0) + 1;
+      await saveState(root, fresh);
+    });
     return `Wrote ${path.relative(workRoot, target)} (${content.length} bytes). Call mission_check to verify.`;
   }
 
@@ -947,10 +1014,23 @@ export class Supervisor {
         at: new Date().toISOString(),
         by: worker?.taskId === id ? "worker" : "lead",
       };
-      if (status === "done") release(progress, id, TASK_STATUS.COMPLETED);
-      else fail(progress, id, summary, Date.now());
+      const task = (await loadTasks(root)).find((t) => t.id === id);
+      const check = state.last_checks?.find((r) => r.id === task?.verify);
+      const credible = status !== "done" || !task?.verify || Boolean(check?.ok);
+      if (credible) {
+        if (status === "done") release(progress, id, TASK_STATUS.COMPLETED);
+        else fail(progress, id, summary, Date.now());
+      } else {
+        fail(progress, id, `verify check ${task.verify} is red`, Date.now());
+      }
       await Promise.all([saveState(root, state), saveProgress(root, progress)]);
-      await appendJournal(root, `task #${id} reported ${status}: ${summary.slice(0, 200)} (harness verifies)`);
+      await appendJournal(
+        root,
+        credible
+          ? `task #${id} reported ${status}: ${summary.slice(0, 200)} (harness verifies)`
+          : `task #${id} report rejected: verify check ${task.verify} is red → retry`,
+      );
+      if (!credible) return `Report rejected: task #${id} verify check ${task.verify} is not green. The lease was released for retry.`;
       return status === "done"
         ? `Report recorded for task #${id}; lease released. The harness still verifies its check.`
         : `Failure recorded for task #${id}; lease released for retry.`;

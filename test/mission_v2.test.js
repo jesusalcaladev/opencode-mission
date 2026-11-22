@@ -5,6 +5,7 @@ import { STATUS, TASK_STATUS, parseFrontmatter, objectiveOf, normalizeTask } fro
 import { decideNext, applyTaskResults } from "../src/mission/decide.js";
 import { distill, buildBrief } from "../src/mission/memory.js";
 import { fromTasks, migrateV1, claim, release, fail, expired, retryable, MAX_ATTEMPTS } from "../src/mission/lease.js";
+import { needsReplan, afterReplan, replanPrompt, STALL_TURNS } from "../src/mission/watchdog.js";
 
 test("state: frontmatter numbers and objective extraction", () => {
   const text = "---\nid: x\nmax_turns: 9\n---\nDo the thing.\nmore";
@@ -96,6 +97,26 @@ test("lease: attempts are bounded", () => {
   }
   assert.equal(retryable(progress, 1), false);
   assert.equal(progress[0].status, TASK_STATUS.FAILED);
+});
+
+test("watchdog: a stalled tier-2 mission requests a real re-plan", () => {
+  const stalled = { strategy_tier: 2, turn: 8, last_progress_turn: 5, last_replan_turn: 0 };
+  assert.equal(needsReplan(stalled), true);
+  const reset = afterReplan(stalled, 8);
+  assert.equal(reset.strategy_tier, 1);
+  assert.equal(reset.last_replan_turn, 8);
+  assert.equal(needsReplan(reset), false);
+  const early = { strategy_tier: 2, turn: 6, last_progress_turn: 5, last_replan_turn: 0 };
+  assert.equal(needsReplan(early), false);
+  const prompt = replanPrompt({ objective: "Ship it", results: [{ id: "x", ok: false, summary: "exit 1" }], tasks: [] });
+  assert.match(prompt, /COMPLETELY NEW/);
+  assert.match(prompt, /exit 1/);
+  assert.ok(STALL_TURNS >= 1);
+});
+
+test("decide: write ceiling stops a runaway agent", () => {
+  const state = { status: STATUS.RUNNING, turn: 2, max_turns: 20, cost_usd: 0, budget_usd: 5, writes: 50, max_writes: 50 };
+  assert.equal(decideNext({ state, results: [{ id: "x", ok: true }], tasks: [] }).reason, "write-ceiling");
 });
 
 test("lease: v1 migration makes in_progress tasks reclaimable", () => {

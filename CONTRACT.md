@@ -104,6 +104,18 @@ is still `running`, whose session exists and is not busy, and whose last prompt 
 older than 30s is auto-resumed with `[MISSION RESUME]`. A reload in the middle of a
 turn cannot inject a second prompt.
 
+## Watchdog and hard stops
+
+A `done` report is accepted only when the task's `verify` check is green; a red
+check releases the lease for retry. After `STALL_TURNS` (2) turns without verified
+progress at strategy tier >= 2, the harness asks the model for a **new plan** and
+applies it only if it passes the same validation as the initial plan. The new
+criteria/tasks replace the old ones while turn, cost and write counters are kept.
+
+Three independent hard stops supplement the turn and failure ceilings:
+`budget_usd` (from reported assistant cost), `max_wallclock_min` (from
+`started_at`) and `max_writes` (successful `mission_write` calls).
+
 ## Memory and context
 
 The journal is an audit log, not the model's memory. Every 4 turns the supervisor

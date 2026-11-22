@@ -169,6 +169,7 @@ designed to be ported to other harnesses (a zode implementation is planned).
 | `max_turns` | `16` | Turn ceiling |
 | `budget_usd` | `5` | Cost ceiling (when the provider reports cost) |
 | `max_wallclock_min` | `0` | Wall-clock ceiling (0 = off) |
+| `max_writes` | `0` | Successful file writes before aborting (0 = off) |
 | `max_failures` | `3` | Failed turns before aborting |
 | `handoff_every_turns` | `4` | Rotate to a fresh session (0 = off) |
 | `isolation` | `none` | `worktree` runs in a sibling git worktree |
@@ -192,6 +193,16 @@ designed to be ported to other harnesses (a zode implementation is planned).
 ```
 
 `expect` is `exit0` or `contains:<text>` (requires exit 0 and the substring).
+
+## Documentation
+
+| File | For |
+| --- | --- |
+| [`CONTRACT.md`](./CONTRACT.md) | Host-agnostic contract and file formats |
+| [`ARCHITECTURE.md`](./ARCHITECTURE.md) | Module map, data flow and the invariants that must not break |
+| [`RUNBOOK.md`](./RUNBOOK.md) | Running unattended for hours: budgets, monitoring, stop and resume |
+| [`CONTRIBUTING.md`](./CONTRIBUTING.md) | Development rules and PR checklist |
+| [`SECURITY.md`](./SECURITY.md) | Threat model and reporting |
 
 ## Development
 

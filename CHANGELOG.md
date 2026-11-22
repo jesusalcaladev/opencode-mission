@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Real watchdog: after two verified-stalled turns the harness asks the model for a
+  completely new plan, validates it with the same rules as the initial plan, and
+  applies it without resetting turn/cost/write counters.
+- Per-task report verification: a `done` report whose `verify` check is red is
+  rejected and the lease is released for retry.
+- `max_writes` ceiling and wall-clock frontmatter are now enforced by `decide()`.
+- `ARCHITECTURE.md` and `RUNBOOK.md` for long unattended runs.
+
 ## [0.2.0] - 2026-11-21
 
 ### Added

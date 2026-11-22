@@ -7,11 +7,13 @@ import { Supervisor } from "../src/supervisor.js";
 import {
   ensureMission,
   fileExists,
+  loadCriteria,
   loadProgress,
   loadState,
   loadTasks,
   missionDir,
   saveProgress,
+  saveState,
   writeTextAtomic,
 } from "../src/mission.js";
 
@@ -285,6 +287,75 @@ test("lease: an expired worker lease is reclaimed on the next idle", async () =>
     assert.ok(ctx.workerPrompts.length >= 1);
     const progress = await loadProgress(root);
     assert.ok(progress[0].attempts >= 1);
+    sup.dispose();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("supervisor: every successful write is counted toward the ceiling", async () => {
+  const root = await fixture();
+  try {
+    const sup = new Supervisor(fakeCtx());
+    await sup.start("ses_test", root);
+    await sup.toolWrite("ses_test", { path: "notes.txt", content: "hello" });
+    assert.equal((await loadState(root)).writes, 1);
+    sup.dispose();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("supervisor: a done report with a red verify check is rejected and retried", async () => {
+  const root = await fixture();
+  try {
+    const sup = new Supervisor(fakeCtx());
+    await sup.start("ses_test", root);
+    const state = await loadState(root);
+    state.last_checks = [{ id: "done", ok: false, summary: "exit 1" }];
+    await saveState(root, state);
+
+    const refused = await sup.toolTaskDone("ses_test", { id: 1, status: "done", summary: "I wrote done.txt" });
+    assert.match(refused, /Report rejected/);
+    assert.equal((await loadProgress(root))[0].attempts, 1);
+
+    const green = await loadState(root);
+    green.last_checks = [{ id: "done", ok: true, summary: "exit 0" }];
+    await saveState(root, green);
+    const accepted = await sup.toolTaskDone("ses_test", { id: 1, status: "done", summary: "done.txt now exists" });
+    assert.match(accepted, /Report recorded/);
+    assert.equal((await loadProgress(root))[0].status, "completed");
+    sup.dispose();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("watchdog: a stalled mission gets a validated new plan from the model", async () => {
+  const root = await fixture();
+  try {
+    const plan = {
+      objective: "New approach",
+      checks: [{ id: "newcheck", cmd: "test -f new.txt", expect: "exit0", timeout_ms: 10000 }],
+      tasks: [{ id: 1, subject: "Create new.txt", files: ["new.txt"], verify: "newcheck", blocked_by: [] }],
+      settings: { max_turns: 12, budget_usd: 5, max_failures: 3, handoff_every_turns: 0 },
+    };
+    const ctx = fakeCtx();
+    const sup = new Supervisor(ctx, { generate: async () => JSON.stringify(plan) });
+    await sup.start("ses_test", root);
+    const state = await loadState(root);
+    state.strategy_tier = 2;
+    state.turn = 8;
+    state.last_progress_turn = 5;
+    await saveState(root, state);
+
+    const applied = await sup.maybeReplan(root, state, [], await loadTasks(root));
+    assert.equal(applied, true);
+    const criteria = await loadCriteria(root);
+    assert.equal(criteria.checks[0].id, "newcheck");
+    const journal = await readFile(path.join(missionDir(root), "journal.md"), "utf8");
+    assert.match(journal, /re-plan applied/);
+    assert.equal((await loadState(root)).strategy_tier, 1);
     sup.dispose();
   } finally {
     await rm(root, { recursive: true, force: true });
