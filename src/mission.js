@@ -22,6 +22,17 @@ import { selectTask, applyTaskResults, nextStrategy, decideNext } from "./missio
 import { buildBrief, distill, MEMORY_BUDGET } from "./mission/memory.js";
 import { needsReplan, replanPrompt, afterReplan, STALL_TURNS } from "./mission/watchdog.js";
 import {
+  DEFAULT_MAX_EXTENSIONS,
+  EXTEND_TURNS,
+  EXTEND_MINUTES,
+  EXTEND_WRITES,
+  parseRoadmap,
+  nextItem,
+  markItemDone,
+  chainDecision,
+  applyExtension,
+} from "./mission/chain.js";
+import {
   migrateV1,
   fromTasks,
   toTasks,
@@ -58,6 +69,15 @@ export {
   replanPrompt,
   afterReplan,
   STALL_TURNS,
+  DEFAULT_MAX_EXTENSIONS,
+  EXTEND_TURNS,
+  EXTEND_MINUTES,
+  EXTEND_WRITES,
+  parseRoadmap,
+  nextItem,
+  markItemDone,
+  chainDecision,
+  applyExtension,
   migrateV1,
   fromTasks,
   toTasks,
@@ -140,6 +160,8 @@ export async function ensureMission(root, options = {}) {
   }
   const journalPath = path.join(dir, FILES.journal);
   if (!(await fileExists(journalPath))) await writeTextAtomic(journalPath, "# Journal\n\n");
+  const roadmapPath = path.join(dir, FILES.roadmap);
+  if (!(await fileExists(roadmapPath))) await writeTextAtomic(roadmapPath, "# Roadmap\n\n");
 
   const statePath = path.join(dir, FILES.state);
   if (!(await fileExists(statePath))) await writeJsonAtomic(statePath, initialState());
@@ -181,6 +203,7 @@ export async function ensureMission(root, options = {}) {
   return {
     dir,
     missionPath,
+    roadmapPath,
     criteriaPath,
     tasksPath,
     journalPath,
@@ -243,4 +266,20 @@ export async function appendJournal(root, line) {
 }
 export async function stopRequested(root) {
   return fileExists(path.join(missionDir(root), FILES.stop));
+}
+export async function loadRoadmap(root) {
+  return readText(path.join(missionDir(root), FILES.roadmap));
+}
+export async function saveRoadmap(root, text) {
+  await writeTextAtomic(path.join(missionDir(root), FILES.roadmap), text);
+}
+export async function extendRequested(root) {
+  return fileExists(path.join(missionDir(root), FILES.extend));
+}
+export async function consumeExtend(root) {
+  const file = path.join(missionDir(root), FILES.extend);
+  if (!(await fileExists(file))) return false;
+  const { unlink } = await import("node:fs/promises");
+  await unlink(file);
+  return true;
 }

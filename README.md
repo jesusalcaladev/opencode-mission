@@ -171,6 +171,7 @@ designed to be ported to other harnesses (a zode implementation is planned).
 | `budget_usd` | `5` | Cost ceiling (when the provider reports cost) |
 | `max_wallclock_min` | `0` | Wall-clock ceiling (0 = off) |
 | `lease_ms` | `300000` | Worker lease duration; renew with `mission_heartbeat` |
+| `max_extensions` | `3` | How many times the `EXTEND` file may raise the budgets |
 | `max_writes` | `0` | Successful file writes before aborting (0 = off) |
 | `max_failures` | `3` | Failed turns before aborting |
 | `handoff_every_turns` | `4` | Rotate to a fresh session (0 = off) |
@@ -190,6 +191,8 @@ designed to be ported to other harnesses (a zode implementation is planned).
   memory.md         distilled decisions/constraints (~4k), injected into every request
   summary.md        regenerated short memory summary
   progress.json     task leases: owner, attempts, lease_until, last_error
+  roadmap.md        optional checklist of chained missions
+  EXTEND            consume to grant one bounded budget extension
   evidence/*.txt    stdout, stderr, exit code and timing per check
   STOP              kill switch, checked at every idle boundary
 ```

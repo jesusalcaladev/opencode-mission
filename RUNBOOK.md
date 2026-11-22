@@ -26,6 +26,24 @@ Set these in `.mission/mission.md` frontmatter (the planner writes defaults):
 
 If the model is unpriced, cost is $0: rely on turns, wall-clock and writes.
 
+## Chaining missions for hours
+
+Write `.mission/roadmap.md` with one item per mission:
+
+```markdown
+# Roadmap
+
+- [ ] id: cli: build the CLI
+- [ ] id: docs: write the README
+- [ ] id: polish: fix the remaining checks
+```
+
+When a mission completes, the harness ticks the item and starts the next one in
+the **same workspace**, carrying `memory.md` forward. No human input needed.
+
+If a budget stop fires, create `EXTEND` to grant one more block of turns/writes
+(max `max_extensions` times). Without `EXTEND`, the stop is final.
+
 ## Watch it
 
 ```text
@@ -66,6 +84,8 @@ The mission ends with `status: aborted` and `finish_reason: stop-file`. Remove
 | `lease expired` on a live worker | Worker did not call `mission_heartbeat` | Raise `lease_ms`; the worker prompt already asks for heartbeats |
 | `re-plan applied` | Same approach failed twice | Read `memory.md` to see the discarded approach |
 | `lease expired` in journal | A worker went silent | Expected; the harness retried it |
+| `rescue timer re-admitted` | A session went quiet without an idle event | Expected; the supervisor resumed it |
+| `chain exhausted` | All roadmap items are done | Add more items to `roadmap.md` |
 
 ## Long-run checklist
 

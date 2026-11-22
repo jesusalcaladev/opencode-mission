@@ -13,6 +13,7 @@ import {
   loadTasks,
   missionDir,
   saveProgress,
+  saveRoadmap,
   saveState,
   writeTextAtomic,
 } from "../src/mission.js";
@@ -389,6 +390,75 @@ test("watchdog: a stalled mission gets a validated new plan from the model", asy
     const journal = await readFile(path.join(missionDir(root), "journal.md"), "utf8");
     assert.match(journal, /re-plan applied/);
     assert.equal((await loadState(root)).strategy_tier, 1);
+    sup.dispose();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("continuity: EXTEND consumes once and raises the turn ceiling", async () => {
+  const root = await fixture();
+  try {
+    const ctx = fakeCtx();
+    const sup = new Supervisor(ctx);
+    await sup.start("ses_test", root);
+    const state = await loadState(root);
+    state.turn = state.max_turns - 1;
+    await saveState(root, state);
+    await writeTextAtomic(path.join(missionDir(root), "EXTEND"), "");
+
+    await sup.handleIdle("ses_test");
+    const after = await loadState(root);
+    assert.equal(after.extensions, 1);
+    assert.equal(after.status, "running");
+    assert.ok(after.max_turns > state.max_turns);
+    const journal = await readFile(path.join(missionDir(root), "journal.md"), "utf8");
+    assert.match(journal, /budget extended 1\/3/);
+    assert.equal(await fileExists(path.join(missionDir(root), "EXTEND")), false);
+    sup.dispose();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("continuity: chain starts the next roadmap item and carries memory", async () => {
+  const root = await fixture();
+  try {
+    const ctx = fakeCtx();
+    const sup = new Supervisor(ctx);
+    await sup.start("ses_test", root);
+    await saveRoadmap(root, "# Roadmap\n\n- [ ] id: first: do one thing\n- [ ] id: second: do another\n");
+    await writeTextAtomic(path.join(missionDir(root), "memory.md"), "decided to keep the contract small");
+
+    const started = await sup.continueChain(root, "ses_test");
+    assert.equal(started, true);
+    assert.equal((await loadState(root)).chain_index, 1);
+    const roadmap = await readFile(path.join(missionDir(root), "roadmap.md"), "utf8");
+    assert.match(roadmap, /- \[x\] id: first/);
+    assert.match(roadmap, /- \[ \] id: second/);
+    assert.match(await readFile(path.join(missionDir(root), "memory.md"), "utf8"), /contract small/);
+    assert.match(ctx.prompts.at(-1), /MISSION CHAIN/);
+    sup.dispose();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("continuity: rescue timer re-admits exactly one stalled turn", async () => {
+  const root = await fixture();
+  try {
+    const ctx = fakeCtx();
+    const sup = new Supervisor(ctx);
+    await sup.start("ses_test", root);
+    const state = await loadState(root);
+    state.last_prompt_at = Date.now() - 200_000;
+    await saveState(root, state);
+
+    await sup.rescueStalled();
+    const prompts = ctx.prompts.filter((p) => p.includes("MISSION RESCUE"));
+    assert.equal(prompts.length, 1);
+    const journal = await readFile(path.join(missionDir(root), "journal.md"), "utf8");
+    assert.match(journal, /rescue timer re-admitted/);
     sup.dispose();
   } finally {
     await rm(root, { recursive: true, force: true });

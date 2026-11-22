@@ -10,25 +10,33 @@ import path from "node:path";
 import { mkdir, readFile } from "node:fs/promises";
 import { runChecks } from "./checks.js";
 import { checkTestIntegrity, createWorktree, gitCommit } from "./verify.js";
-import { createPlan, normalizePlan } from "./planner.js";
+import { createPlan, fallbackPlan, normalizePlan } from "./planner.js";
 import { reportsText, wavesFor, workerBrief, workerPrompt } from "./team.js";
 import {
   STATUS,
   TASK_STATUS,
   VERSION,
   appendJournal,
+  applyExtension,
   applyTaskResults,
   buildBrief,
+  chainDecision,
   claim,
+  consumeExtend,
+  DEFAULT_MAX_EXTENSIONS,
   decideNext,
   distill,
   ensureMission,
+  extendRequested,
   expired,
   fail,
   fromTasks,
   isLeased,
   loadCriteria,
   loadMemory,
+  loadRoadmap,
+  markItemDone,
+  nextItem,
   loadProgress,
   loadState,
   loadSummary,
@@ -37,6 +45,7 @@ import {
   needsReplan,
   objectiveOf,
   afterReplan,
+  parseRoadmap,
   replanPrompt,
   readJournal,
   readJournalTail,
@@ -45,6 +54,7 @@ import {
   retryable,
   saveMemory,
   saveProgress,
+  saveRoadmap,
   saveState,
   saveSummary,
   saveTasks,
@@ -86,10 +96,12 @@ export class Supervisor {
     this.stateQueue = new Map();
     this.writeOwners = new Set();
     this.timers = new Set();
+    this.rescueTimer = null;
     this.controller = new AbortController();
     this.maxWorkers = Math.min(8, Math.max(1, Number(options.maxWorkers) || 3));
     this.missionsRoot = options.missionsRoot ? path.resolve(options.missionsRoot) : null;
     this.enableWorkers = options.enableWorkers !== false;
+    this.enableChaining = options.enableChaining !== false;
   }
 
   // ---- binding / restart recovery -------------------------------------------
@@ -150,6 +162,39 @@ export class Supervisor {
       });
     } catch {
       // A stale registry entry is not a reason to fail plugin setup.
+    }
+  }
+
+  startRescueTimer() {
+    const interval = Number(this.options.rescueIntervalMs) || 60_000;
+    this.rescueTimer = setInterval(() => void this.rescueStalled(), interval);
+    this.rescueTimer.unref?.();
+  }
+
+  // Catches a session that went quiet without firing experimental.idle.
+  async rescueStalled() {
+    for (const entry of this.registry) {
+      const root = path.resolve(entry.root);
+      try {
+        const state = await loadState(root);
+        if (state.status !== STATUS.RUNNING) continue;
+        if (Date.now() - (state.last_prompt_at || 0) < 180_000) continue;
+        if (this.busy.has(entry.sessionID)) continue;
+        const session = await this.ctx.session.get({ sessionID: entry.sessionID });
+        if (!session || session.outcome === "failed" || session.outcome === "interrupted") continue;
+        if ((session.time?.busy ?? 0) > (session.time?.idle ?? 0)) continue;
+        state.last_prompt_at = Date.now();
+        await this.saveStateSafe(root, state);
+        await this.refreshBrief(entry.sessionID, root, state.last_checks ?? []);
+        await this.ctx.session.prompt({
+          sessionID: entry.sessionID,
+          text: "[MISSION RESCUE] This session went quiet while the mission was still running. Continue from the durable state in .mission/.",
+          delivery: "queue",
+        });
+        await this.journal(root, "rescue timer re-admitted a stalled turn");
+      } catch {
+        // A stale registry entry must never break the timer.
+      }
     }
   }
 
@@ -275,6 +320,7 @@ export class Supervisor {
     state.finish_reason = null;
     state.last_verdict = null;
     state.failures = 0;
+    state.chain_total = parseRoadmap(await loadRoadmap(root)).length;
     state.started_at = state.started_at || new Date().toISOString();
     state.last_prompt_at = Date.now();
 
@@ -484,6 +530,44 @@ export class Supervisor {
     const text = `[${label}] ${reason}${state.unblock ? `. Unblock: ${state.unblock}` : ""}. Mission state: ${path.join(root, ".mission")}`;
     await this.ctx.session.synthetic({ sessionID, text }).catch(() => {});
     await this.notify(label, `${text}\nworkspace: ${root}`);
+    if (status === STATUS.COMPLETE && this.enableChaining) {
+      setImmediate(() => {
+        void this.continueChain(root, sessionID).catch((err) => {
+          void this.journal(root, `chain failed: ${shortError(err)}`).catch(() => {});
+        });
+      });
+    }
+  }
+
+  // Start the next roadmap item in the same workspace, carrying distilled
+  // memory forward. setImmediate keeps this out of the idle call stack.
+  async continueChain(root, sessionID) {
+    const roadmapText = await loadRoadmap(root);
+    const items = parseRoadmap(roadmapText);
+    if (items.length === 0) return false;
+    const item = nextItem(items);
+    if (!item) {
+      await this.journal(root, "chain exhausted: all roadmap items are done");
+      return false;
+    }
+    const plan = fallbackPlan(item.title, root);
+    await this.writePlanFiles(root, plan, item.title, true);
+    const state = await loadState(root);
+    Object.assign(state, {
+      session_id: sessionID,
+      started_at: new Date().toISOString(),
+      chain_index: (state.chain_index ?? 0) + 1,
+      chain_total: items.length,
+    });
+    await Promise.all([this.saveStateSafe(root, state), saveRoadmap(root, markItemDone(roadmapText, item.id))]);
+    await this.journal(root, `chain: starting mission ${state.chain_index}/${items.length} — ${item.title}`);
+    await this.refreshBrief(sessionID, root, []);
+    await this.ctx.session.prompt({
+      sessionID,
+      text: `[MISSION CHAIN] Mission ${state.chain_index}/${items.length}: ${item.title}\nDistilled memory from previous missions is in your brief. Continue from disk state; do not restart from scratch.`,
+      delivery: "queue",
+    });
+    return true;
   }
 
   async notify(kind, text) {
@@ -511,6 +595,7 @@ export class Supervisor {
       `Checks: ${green}/${state.last_checks.length} green · tasks: ${tasks.filter((t) => t.status === "completed").length}/${tasks.length}`,
       `Next task: ${task ? `#${task.id} ${task.subject}` : "none"}`,
       `Strategy tier: ${state.strategy_tier} · failures: ${state.failures ?? 0} · finish reason: ${state.finish_reason ?? "none"}`,
+      `Chain: ${state.chain_index ?? 0}/${state.chain_total ?? 0} · extensions: ${state.extensions ?? 0}/${state.max_extensions ?? 3}`,
       `Workspace: ${this.effectiveRoot(root, state)}${state.worktree_branch ? ` (${state.worktree_branch})` : ""}`,
     ].join("\n");
   }
@@ -800,6 +885,21 @@ export class Supervisor {
       state.last_verdict = null;
       const stopFile = await stopRequested(root);
       let decision = decideNext({ state, results, tasks, verdict, stopFile });
+      if (decision.type === "stop") {
+        const roadmap = parseRoadmap(await loadRoadmap(root));
+        const chain = chainDecision({
+          decision,
+          extendRequested: await extendRequested(root),
+          extensions: state.extensions ?? 0,
+          maxExtensions: state.max_extensions ?? DEFAULT_MAX_EXTENSIONS,
+          next: nextItem(roadmap),
+        });
+        if (chain.type === "extend" && (await consumeExtend(root))) {
+          Object.assign(state, applyExtension(state));
+          await this.journal(root, `budget extended ${state.extensions}/${state.max_extensions ?? DEFAULT_MAX_EXTENSIONS} after ${chain.reason}`);
+          decision = { type: "continue" };
+        }
+      }
       await this.journalTurn(root, state, results, tasks, decision);
       await this.saveStateSafe(root, state);
       await this.compactMemory(root, state);
@@ -911,6 +1011,7 @@ export class Supervisor {
   }
 
   dispose() {
+    if (this.rescueTimer) clearInterval(this.rescueTimer);
     for (const timer of this.timers) clearTimeout(timer);
     this.timers.clear();
     this.controller.abort();

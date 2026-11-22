@@ -44,6 +44,8 @@ export default Plugin.define({
       maxWorkers: ctx.options?.maxWorkers,
       missionsRoot: ctx.options?.missionsRoot,
       enableWorkers: ctx.options?.enableWorkers,
+      enableChaining: ctx.options?.enableChaining,
+      rescueIntervalMs: ctx.options?.rescueIntervalMs,
       generate: async ({ prompt, model }) => {
         const out = await ctx.experimental.generate.text({ prompt, model });
         return typeof out === "string" ? out : (out?.text ?? out?.data?.text ?? "");
@@ -51,6 +53,7 @@ export default Plugin.define({
     });
     await supervisor.init();
     supervisor.startEventRecovery();
+    supervisor.startRescueTimer();
     const registrations = [];
 
     registrations.push(

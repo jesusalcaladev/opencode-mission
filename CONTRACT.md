@@ -116,6 +116,21 @@ Three independent hard stops supplement the turn and failure ceilings:
 `budget_usd` (from reported assistant cost), `max_wallclock_min` (from
 `started_at`) and `max_writes` (successful `mission_write` calls).
 
+## Continuity across hours
+
+A mission may declare a `roadmap.md` checklist. On `complete`, the harness ticks
+the current item and starts the next one in the same workspace, carrying
+`memory.md` into the new brief. `chain_index` / `chain_total` are persisted.
+
+A budget stop (`budget`, `max-turns`, `write-ceiling`, `deadline`) can be extended
+by creating `EXTEND`: the file is consumed, budgets grow by a fixed block, and
+`extensions` increments. `max_extensions` bounds this; without the file the stop
+is absolute. A `blocked` verdict is never extendable.
+
+A 60-second rescue timer re-admits one prompt for a running mission whose session
+is idle and whose last prompt is older than three minutes, covering a missed
+`experimental.idle` event.
+
 ## Memory and context
 
 The journal is an audit log, not the model's memory. Every 4 turns the supervisor

@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Mission chaining: `.mission/roadmap.md` checklists; a completed mission starts
+  the next item in the same workspace with distilled memory carried forward.
+- `EXTEND` file + `max_extensions` (default 3): a budget stop can be extended a
+  bounded number of times without removing the hard stops.
+- Rescue timer: every 60 s a running mission whose session went quiet is
+  re-admitted once, so the loop survives a missed `experimental.idle`.
+- Chain/extensions are shown in `/mission status` and persisted in `state.json`.
+
 ### Fixed
 
 - One serialized write queue per mission now covers journal, state and progress;
