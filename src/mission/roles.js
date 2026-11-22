@@ -55,6 +55,16 @@ export function stageFor({ stage, tasksDone, review, reviewAttempts = 0 }) {
   return { stage: STAGE.REVIEW, decision: "blocked", reason: "review: unresolved high severity" };
 }
 
+/// Two independent reviews: a high finding only stays high if both reviewers
+/// agree. A lone high is downgraded to medium and recorded as a fact instead.
+export function combineReviews(first = "", second = "") {
+  const a = parseReview(first);
+  const b = parseReview(second);
+  const text = `${first}\n${second}`.trim();
+  if ((a.high.length > 0) === (b.high.length > 0)) return text;
+  return text.replace(/SEVERITY:\s*high/gi, "SEVERITY: medium");
+}
+
 export function roleForStage(stage) {
   switch (stage) {
     case STAGE.INVESTIGATE: return ROLE.INVESTIGATOR;

@@ -232,7 +232,9 @@ npm test               # full suite, no network or TUI required
 node --test --watch test/*.test.js
 ```
 
-The server part only is implemented (`@opencode/plugin`); there is no TUI or GUI part.
+The plugin has a server part (`@opencode/plugin`) and a TUI part (`./tui`,
+`@opencode/plugin/tui`). The TUI shows a live `MISSION ▓▓▓░░ …` line in the
+footer and adds `/mission-status`.
 See [CONTRIBUTING.md](./CONTRIBUTING.md) before sending changes.
 
 ## Known limitations

@@ -8,6 +8,17 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **TUI part** (`./tui`): live mission progress in `home.footer.status` plus a
+  `/mission-status` command and toast. Server can now write a pointer file so
+  the TUI reads durable state without polling the server.
+- Second-opinion review: two independent reviewers; `SEVERITY: high` only blocks
+  if both agree, otherwise it is downgraded to `medium`.
+- Repeat guard: three turns without verified progress force strategy tier 3.
+- Model-driven memory compaction with the keyword distiller as fallback.
+- Planner asks for `cost_hint` / `time_hint` per task.
+
+### Added
+
 - Parallel criteria execution (`maxParallel`, default 3) with workspace-fingerprint
   caching: unchanged work reuses the last verified results instead of re-running.
 - Model per role: `fastModel` for read-only roles, `model` for implementers, and

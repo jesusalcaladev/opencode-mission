@@ -21,7 +21,7 @@ import {
 import { selectTask, applyTaskResults, nextStrategy, decideNext } from "./mission/decide.js";
 import { buildBrief, distill, MEMORY_BUDGET } from "./mission/memory.js";
 import { needsReplan, replanPrompt, afterReplan, STALL_TURNS } from "./mission/watchdog.js";
-import { ROLE, STAGE, canWrite, parseReview, stageFor, roleForStage, MAX_REVIEW_ATTEMPTS } from "./mission/roles.js";
+import { ROLE, STAGE, canWrite, parseReview, combineReviews, stageFor, roleForStage, MAX_REVIEW_ATTEMPTS } from "./mission/roles.js";
 import { parseFindings, rankFindings, cycleDecision, worthImproving } from "./mission/improve.js";
 import { loadProjectInstructions, MAX_INSTRUCTION_CHARS } from "./mission/instructions.js";
 import { upsertFact, renderFacts, MAX_FACTS } from "./mission/facts.js";
@@ -77,6 +77,7 @@ export {
   STAGE,
   canWrite,
   parseReview,
+  combineReviews,
   stageFor,
   roleForStage,
   MAX_REVIEW_ATTEMPTS,

@@ -3,7 +3,8 @@
 
 export { default as path } from "node:path";
 
-export { mkdir, readFile } from "node:fs/promises";
+export { mkdir, readFile, writeFile } from "node:fs/promises";
+export { default as os } from "node:os";
 export * from "../mission.js";
 export { runChecks, workspaceStamp, criteriaSignature } from "../checks.js";
 export { checkTestIntegrity, createWorktree, gitCommit, gitRevert } from "../verify.js";

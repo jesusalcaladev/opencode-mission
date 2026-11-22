@@ -15,7 +15,7 @@ export function planPrompt(objective, workspace) {
     '{',
     '  "objective": "one precise sentence restating the goal",',
     '  "checks": [{"id":"short_id","cmd":"shell command","expect":"exit0 | contains:text","timeout_ms":30000}],',
-    '  "tasks": [{"id":1,"subject":"short imperative","files":["relative/path.js"],"verify":"check_id","blocked_by":[]}],',
+    '  "tasks": [{"id":1,"subject":"short imperative","files":["relative/path.js"],"verify":"check_id","blocked_by":[],"cost_hint":"low|medium|high","time_hint":"short|medium|long"}],',
     '  "settings": {"max_turns":16,"budget_usd":5,"max_wallclock_min":120,"lease_ms":300000,"max_writes":200,"handoff_every_turns":4,"max_failures":3,"isolation":"none"}',
     '}',
     "",

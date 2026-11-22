@@ -49,6 +49,7 @@ export const initialState = () => ({
   best_green: 0,
   last_progress_turn: 0,
   strategy_tier: 1,
+  stall_turns: 0,
   last_verdict: null,
   last_checks: [],
   session_id: null,

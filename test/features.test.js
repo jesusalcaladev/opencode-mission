@@ -7,6 +7,7 @@ import { runChecks, workspaceStamp } from "../src/checks.js";
 import { loadProjectInstructions } from "../src/mission/instructions.js";
 import { upsertFact, renderFacts } from "../src/mission/facts.js";
 import { Supervisor } from "../src/supervisor.js";
+import { combineReviews } from "../src/mission/roles.js";
 
 function fakeCtx() {
   return {
@@ -65,6 +66,30 @@ test("facts: upsert replaces by kind+subject and renders compactly", () => {
   assert.equal(facts.length, 2);
   assert.match(renderFacts(facts), /use mixins/);
   assert.match(renderFacts(facts), /\[blocker\] quota/);
+});
+
+test("review: a lone high finding is downgraded, agreement keeps it high", () => {
+  const a = "SEVERITY: high — broken output";
+  const b = "SEVERITY: low — style only";
+  assert.doesNotMatch(combineReviews(a, b), /SEVERITY: high/);
+  assert.match(combineReviews(a, a), /SEVERITY: high/);
+});
+
+test("repeat guard: three stalled turns force strategy tier 3", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "mission-repeat-"));
+  try {
+    const sup = new Supervisor(fakeCtx());
+    await sup.start("ses_test", root, { autoDispatch: false });
+    const { loadState } = await import("../src/mission.js");
+    const state = await loadState(root);
+    state.stall_turns = 2;
+    state.strategy_tier = 2;
+    sup.recordTurn(state, [], [], true);
+    assert.equal(state.strategy_tier, 3);
+    sup.dispose();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("models: fastModel is used for read-only roles", () => {

@@ -1,6 +1,6 @@
 // intelligence mixin — extracted from supervisor.js; behavior unchanged.
 import * as d from "./deps.js";
-const { allGreen, workspaceStamp, criteriaSignature, upsertFact, renderFacts, loadProjectInstructions, path, mkdir, readFile, nextStrategy, parseReview, replanPrompt, stageFor, STATUS, TASK_STATUS, VERSION, ROLE, STAGE, FILES, appendJournal, applyExtension, applyTaskResults, buildBrief, canWrite, chainDecision, claim, consumeExtend, cycleDecision, decideNext, DEFAULT_MAX_EXTENSIONS, distill, ensureMission, expired, extendRequested, fail, fileExists, fromTasks, isLeased, loadCriteria, loadImprovements, loadMemory, loadProgress, loadRoadmap, loadState, loadSummary, loadTasks, markItemDone, nextItem, needsReplan, normalizePlan, objectiveOf, afterReplan, parseFindings, parseRoadmap, rankFindings, readJournal, readJournalTail, release, renew, retryable, roleForStage, saveImprovements, saveMemory, saveProgress, saveRoadmap, saveState, saveSummary, saveTasks, selectTask, stopRequested, writeJsonAtomic, writeTextAtomic, runChecks, checkTestIntegrity, createWorktree, gitCommit, gitRevert, createPlan, fallbackPlan, investigatorPrompt, reportsText, reviewerPrompt, wavesFor, workerBrief, workerPrompt, shortError, REGISTRY_KEY, MAX_NUDGE, AUTO_RESUME_AGE_MS } = d;
+const { os, writeFile, combineReviews, allGreen, workspaceStamp, criteriaSignature, upsertFact, renderFacts, loadProjectInstructions, path, mkdir, readFile, nextStrategy, parseReview, replanPrompt, stageFor, STATUS, TASK_STATUS, VERSION, ROLE, STAGE, FILES, appendJournal, applyExtension, applyTaskResults, buildBrief, canWrite, chainDecision, claim, consumeExtend, cycleDecision, decideNext, DEFAULT_MAX_EXTENSIONS, distill, ensureMission, expired, extendRequested, fail, fileExists, fromTasks, isLeased, loadCriteria, loadImprovements, loadMemory, loadProgress, loadRoadmap, loadState, loadSummary, loadTasks, markItemDone, nextItem, needsReplan, normalizePlan, objectiveOf, afterReplan, parseFindings, parseRoadmap, rankFindings, readJournal, readJournalTail, release, renew, retryable, roleForStage, saveImprovements, saveMemory, saveProgress, saveRoadmap, saveState, saveSummary, saveTasks, selectTask, stopRequested, writeJsonAtomic, writeTextAtomic, runChecks, checkTestIntegrity, createWorktree, gitCommit, gitRevert, createPlan, fallbackPlan, investigatorPrompt, reportsText, reviewerPrompt, wavesFor, workerBrief, workerPrompt, shortError, REGISTRY_KEY, MAX_NUDGE, AUTO_RESUME_AGE_MS } = d;
 
 export const intelligence = {
   async readMission(root) {
@@ -31,7 +31,24 @@ export const intelligence = {
   async compactMemory(root, state) {
     if (state.turn === 0 || state.turn % 4 !== 0) return;
     const [journal, memory, summary] = await Promise.all([readJournal(root), loadMemory(root), loadSummary(root)]);
-    const distilled = distill({ journal, memory, summary });
+    let distilled = distill({ journal, memory, summary });
+    if (this.options.generate) {
+      try {
+        const prompt = [
+          "Summarize this mission's durable memory for the next context window.",
+          "Keep decisions, reasons, discarded approaches, constraints and facts. Drop noise. Output plain text only.",
+          `CURRENT MEMORY:\n${memory.slice(0, 2000)}`,
+          `RECENT JOURNAL:\n${journal.slice(-4000)}`,
+        ].join("\n\n");
+        const out = await this.options.generate({ prompt, model: this.options.fastModel });
+        const text = typeof out === "string" ? out : (out?.text ?? out?.data?.text ?? "");
+        if (text.trim().length > 20) {
+          distilled = { memory: text.trim().slice(0, 4000), summary: `Model-compacted memory at turn ${state.turn}` };
+        }
+      } catch {
+        // Keyword distill is the fallback.
+      }
+    }
     await Promise.all([saveMemory(root, distilled.memory), saveSummary(root, distilled.summary)]);
     await this.journal(root, `memory compacted: ${distilled.memory.split("\n").length} durable entries`);
   },
@@ -78,6 +95,18 @@ export const intelligence = {
       `re-plan applied at turn ${state.turn}: ${parsed.plan.checks.length} checks, ${planned.length} tasks (strategy reset to 1)`,
     );
     return true;
+  },
+
+  async dispatchReviewPair(sessionID, root, state, objective, results) {
+    const prompt = reviewerPrompt({ objective, workspace: root, checks: results.map((r) => ({ id: r.id })) });
+    await this.dispatchRoleStage(sessionID, root, ROLE.REVIEWER, prompt);
+    const first = state.stage_reports?.reviewer?.text ?? "";
+    await this.dispatchRoleStage(sessionID, root, "reviewer2", prompt);
+    const second = state.stage_reports?.reviewer2?.text ?? "";
+    state.stage_reports = state.stage_reports ?? {};
+    state.stage_reports.review = { text: combineReviews(first, second), at: new Date().toISOString() };
+    await this.saveStateSafe(root, state);
+    await this.journal(root, "two independent reviewers completed; completion held until review is clean");
   },
 
   async runImproveCycle(sessionID, root, state, results) {
@@ -181,13 +210,7 @@ export const intelligence = {
     }
 
     if (stage === STAGE.REVIEW && !reviewText) {
-      await this.dispatchRoleStage(
-        sessionID,
-        root,
-        ROLE.REVIEWER,
-        reviewerPrompt({ objective, workspace: root, checks: results.map((r) => ({ id: r.id })) }),
-      );
-      await this.journal(root, "reviewer dispatched; completion held until review is clean");
+      await this.dispatchReviewPair(sessionID, root, state, objective, results);
       return { type: "continue" };
     }
 
@@ -229,13 +252,7 @@ export const intelligence = {
 
     if (next.stage === STAGE.REVIEW) {
       if (!reviewText) {
-        await this.dispatchRoleStage(
-          sessionID,
-          root,
-          ROLE.REVIEWER,
-          reviewerPrompt({ objective, workspace: root, checks: results.map((r) => ({ id: r.id })) }),
-        );
-        await this.journal(root, "reviewer dispatched; completion held until review is clean");
+        await this.dispatchReviewPair(sessionID, root, state, objective, results);
         return { type: "continue" };
       }
       return { type: "complete" };
