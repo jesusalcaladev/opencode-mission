@@ -26,6 +26,8 @@ export type MissionSnapshot = {
   forecast_confidence: string;
   over_hard_budget: boolean;
   over_token_budget: boolean;
+  host_restarts: number;
+  host_restart_error: string;
   writes: number;
   max_writes: number;
   extensions: number;

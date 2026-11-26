@@ -101,6 +101,36 @@ Example cron (every minute):
 The watchdog skips missions with `STOP` or `PAUSE`, never prompts a session
 itself, and never writes state, criteria or tasks.
 
+### Host supervisor (opt-in, higher risk)
+
+Only enable this if you accept that the helper can restart your editor/host.
+It reacts exclusively to a `WAKE` file that is **still stale** after the
+in-process watchdog had a chance to act, so it never restarts a healthy host.
+
+```sh
+MISSION_HOST_RESTART_COMMAND="systemctl --user restart opencode" \
+MISSION_HOST_RESTART_MAX=3 \
+npm run host-supervisor -- --missions-root ~/missions
+```
+
+Use `npm run host-supervisor -- --dry-run ...` first to see decisions without
+running anything. Each restart is recorded in `.mission/host-restart.json`
+(attempts, window, next_at, last_error). `STOP`, `PAUSE`, terminal missions,
+exponential backoff and `max_restarts` are absolute. The helper never writes
+`state.json`, criteria or tasks; after a restart it removes `WAKE` and the
+in-process rescue timer re-admits the turn.
+
+systemd user timer example:
+
+```ini
+# ~/.config/systemd/user/opencode-mission-supervisor.service
+[Service]
+Type=oneshot
+Environment=MISSIONS_ROOT=%h/missions
+Environment=MISSION_HOST_RESTART_COMMAND=systemctl --user restart opencode
+ExecStart=/usr/bin/env npm --prefix /path/to/opencode-mission run host-supervisor
+```
+
 ## Research missions
 
 ```text

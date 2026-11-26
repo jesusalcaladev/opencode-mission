@@ -78,6 +78,10 @@ turns) and **task leases** (a dead worker's task is reclaimed instead of stuck f
 - **External watchdog** — `npm run watchdog` writes `.mission/WAKE` for quiet
   running missions; the in-process watcher consumes it and re-admits the lead.
   Safe to run from cron/systemd.
+- **Opt-in host supervisor** — `npm run host-supervisor` reacts only to a WAKE
+  marker that stayed stale (the in-process watchdog is gone). It respects
+  `STOP`/`PAUSE`, backs off exponentially, caps restarts per window and writes
+  its own ledger; it never edits mission state. Disabled until a command is set.
 - **Context handoff** — rotate to a fresh session on a schedule; the journal is the memory.
 - **Integrity guard** — editing or deleting an existing test aborts with `test-erosion`;
   `mission_write` refuses any path under `.mission/`, so the model cannot rewrite the
@@ -224,26 +228,29 @@ are aliases.
 
 ### Plugin options (`opencode.jsonc`)
 
-| Option                | Default          | Meaning                                                 |
-| --------------------- | ---------------- | ------------------------------------------------------- |
-| `model`               | auto             | `{providerID, id}` forced for planner, lead and workers |
-| `plannerModel`        | auto             | Override for the planning call only                     |
-| `fallbackModel`       | auto             | Override used on quota errors                           |
-| `fastModel`           | auto             | Model for read-only roles (investigator/reviewer)       |
-| `modelsByRole`        | unset            | Per-role model map, e.g. `{ "reviewer": {...} }`        |
-| `missionsRoot`        | `<cwd>/missions` | Where generated mission workspaces live                 |
-| `maxWorkers`          | `3`              | Max parallel sub-agents per wave (no hard cap)          |
-| `wakeIntervalMs`      | `15000`          | How often the internal WAKE watcher scans               |
-| `parallelSlots`       | `8`              | Max running missions from the persistent queue          |
-| `autoQueue`           | `false`          | Auto-launch queued missions on a timer                  |
-| `queueIntervalMs`     | `30000`          | Queue scheduler interval                                |
-| `maxQueueAttempts`    | `3`              | Failed queue launches before an entry is marked failed  |
-| `maxWorkerRevives`    | `1` / `∞`        | Quiet-worker re-admits (unlimited in relentless)        |
-| `imageModel`          | auto             | `{providerID, id}` used by `mission_image_generate`     |
-| `workerTimeoutMs`     | `600000`         | Max wait for a read-only role agent                     |
-| `enableWorkers`       | `true`           | Set to `false` for single-agent runs                    |
-| `notifyUrl`           | unset            | POST terminal-state JSON to this URL                    |
-| `MISSION_WEBHOOK_URL` | unset            | Environment alternative to `notifyUrl`                  |
+| Option                            | Default          | Meaning                                                 |
+| --------------------------------- | ---------------- | ------------------------------------------------------- |
+| `model`                           | auto             | `{providerID, id}` forced for planner, lead and workers |
+| `plannerModel`                    | auto             | Override for the planning call only                     |
+| `fallbackModel`                   | auto             | Override used on quota errors                           |
+| `fastModel`                       | auto             | Model for read-only roles (investigator/reviewer)       |
+| `modelsByRole`                    | unset            | Per-role model map, e.g. `{ "reviewer": {...} }`        |
+| `missionsRoot`                    | `<cwd>/missions` | Where generated mission workspaces live                 |
+| `maxWorkers`                      | `3`              | Max parallel sub-agents per wave (no hard cap)          |
+| `wakeIntervalMs`                  | `15000`          | How often the internal WAKE watcher scans               |
+| `parallelSlots`                   | `8`              | Max running missions from the persistent queue          |
+| `autoQueue`                       | `false`          | Auto-launch queued missions on a timer                  |
+| `queueIntervalMs`                 | `30000`          | Queue scheduler interval                                |
+| `maxQueueAttempts`                | `3`              | Failed queue launches before an entry is marked failed  |
+| `maxWorkerRevives`                | `1` / `∞`        | Quiet-worker re-admits (unlimited in relentless)        |
+| `imageModel`                      | auto             | `{providerID, id}` used by `mission_image_generate`     |
+| `workerTimeoutMs`                 | `600000`         | Max wait for a read-only role agent                     |
+| `enableWorkers`                   | `true`           | Set to `false` for single-agent runs                    |
+| `notifyUrl`                       | unset            | POST terminal-state JSON to this URL                    |
+| `MISSION_WEBHOOK_URL`             | unset            | Environment alternative to `notifyUrl`                  |
+| `MISSION_HOST_RESTART_COMMAND`    | unset            | Command used by the opt-in host supervisor              |
+| `MISSION_HOST_RESTART_MAX`        | `3`              | Restarts per window before giving up                    |
+| `MISSION_HOST_RESTART_BACKOFF_MS` | `60000`          | Base exponential backoff                                |
 
 ### Mission frontmatter (`.mission/mission.md`)
 

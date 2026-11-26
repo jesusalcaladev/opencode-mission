@@ -54,6 +54,9 @@ export function Header(props: { snapshot: MissionSnapshot }) {
             tokens {s().tokens}/{s().max_tokens}
           </text>
         </Show>
+        <Show when={s().host_restarts > 0}>
+          <text fg={g.interactive}>host restarts {s().host_restarts}</text>
+        </Show>
       </box>
       <box flexDirection="row" gap={2}>
         <text fg={g.faint}>history </text>

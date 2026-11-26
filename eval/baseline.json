@@ -1,16 +1,16 @@
 {
   "version": 1,
   "summary": {
-    "total": 12,
-    "passed": 12,
+    "total": 15,
+    "passed": 15,
     "failed": 0,
     "success_rate": 1,
-    "avg_turns": 1.5,
-    "avg_checks_green": 0.75,
+    "avg_turns": 1.2,
+    "avg_checks_green": 0.6,
     "hard_stops": {
       "max-turns": 4,
       "all criteria green": 4,
-      "verified": 3,
+      "verified": 6,
       "token-budget": 1
     }
   },
@@ -28,6 +28,15 @@
       "pass": true
     },
     "global-memory": {
+      "pass": true
+    },
+    "host-restart-basic": {
+      "pass": true
+    },
+    "host-restart-cap": {
+      "pass": true
+    },
+    "host-restart-stop": {
       "pass": true
     },
     "model-rotation": {

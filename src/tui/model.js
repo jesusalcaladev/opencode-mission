@@ -51,7 +51,7 @@ import { discoverRoots, isMissionRoot } from "./registry.js";
 
 export async function loadMission(root) {
   const dir = path.join(root, ".mission");
-  const [state, tasksData, progressData, criteria, missionText, journal, research] =
+  const [state, tasksData, progressData, criteria, missionText, journal, research, hostRestart] =
     await Promise.all([
       readJson(path.join(dir, "state.json"), {}),
       readJson(path.join(dir, "tasks.json"), {}),
@@ -60,6 +60,7 @@ export async function loadMission(root) {
       readText(path.join(dir, "mission.md")),
       readJournalTail(root, JOURNAL_TAIL_CHARS),
       readText(path.join(root, "research", "report.md")),
+      readJson(path.join(dir, "host-restart.json"), {}),
     ]);
   const hasState = state && typeof state === "object" && Object.keys(state).length > 0;
   const checks = normalizeChecks(state);
@@ -145,6 +146,8 @@ export async function loadMission(root) {
     forecast_confidence: forecast.confidence,
     over_hard_budget: forecast.over_hard_budget,
     over_token_budget: forecast.over_token_budget,
+    host_restarts: Number(hostRestart?.attempts) || 0,
+    host_restart_error: String(hostRestart?.last_error ?? ""),
     turn_pct: maxTurns > 0 ? Math.round(ratio(turn, maxTurns) * 100) : 0,
     active: status === STATUS.RUNNING || status === STATUS.PAUSED,
     updatedAt: now,

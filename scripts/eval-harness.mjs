@@ -1,7 +1,9 @@
 // Deterministic fake OpenCode context + case execution for the eval CLI.
 // No network, no paid models, no writes outside a temp directory.
 
-import { access, cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, cp, mkdir, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import path from "node:path";
 import os from "node:os";
 import { Supervisor } from "../src/supervisor.js";
@@ -193,6 +195,58 @@ async function runMission(testCase, base, maxTurns) {
   };
 }
 
+async function runHostRestartCase(testCase, base) {
+  const exec = promisify(execFile);
+  const root = await prepareMission(base, testCase);
+  const dir = path.join(root, ".mission");
+  const wake = path.join(dir, "WAKE");
+  await writeFile(wake, "eval\n", "utf8");
+  const old = new Date(Date.now() - 600_000);
+  await utimes(wake, old, old);
+  if (testCase.policy?.stop) await writeFile(path.join(dir, "STOP"), "", "utf8");
+  if (testCase.policy?.pause) await writeFile(path.join(dir, "PAUSE"), "", "utf8");
+  if (testCase.policy?.seedRestart)
+    await writeFile(
+      path.join(dir, "host-restart.json"),
+      JSON.stringify(testCase.policy.seedRestart),
+      "utf8"
+    );
+  const script = path.join(rootDir, "scripts", "mission-host-supervisor.mjs");
+  const { stdout } = await exec(process.execPath, [
+    script,
+    "--missions-root",
+    base,
+    "--command",
+    testCase.command,
+    "--max",
+    String(testCase.max ?? 3),
+    "--wake-age-ms",
+    "1000",
+    "--backoff-ms",
+    "1000",
+  ]);
+  const report = JSON.parse(stdout.trim().split("\n").at(-1));
+  const marker = path.join(root, "restarted.txt");
+  const actual = {
+    status: "host-restart",
+    restart_marker: await exists(marker),
+    restart_attempts:
+      Number((await readJsonFile(path.join(dir, "host-restart.json")))?.attempts) || 0,
+    restarts: Number(report.restarts) || 0,
+    prompts: stdout,
+  };
+  const scored = scoreCase(testCase.expect ?? {}, actual);
+  return { id: testCase.id, ...scored, ...actual };
+}
+
+async function readJsonFile(file) {
+  try {
+    return JSON.parse(await readFile(file, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
 async function runRotationCase(testCase, base) {
   const ctx = fakeCtx(base, testCase);
   const sup = new Supervisor(ctx, { missionsRoot: base });
@@ -247,6 +301,7 @@ export async function runCase(testCase, maxTurns = 24) {
     const runners = {
       queue: () => runQueueCase(testCase, base),
       rotation: () => runRotationCase(testCase, base),
+      "host-restart": () => runHostRestartCase(testCase, base),
       mission: () => runMission(testCase, base, maxTurns),
       wake: () => runMission(testCase, base, maxTurns),
     };

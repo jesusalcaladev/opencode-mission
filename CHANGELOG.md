@@ -32,6 +32,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Opt-in external host supervisor (`npm run host-supervisor`): reacts only to a
+  stale `WAKE`, respects `STOP`/`PAUSE`, exponential backoff and a restart cap,
+  writes its own ledger, and never edits mission state. TUI shows restart count.
 - Optional `sandbox: copy` for criteria: disposable workspace copy + minimal
   environment, with per-check override and dedicated eval.
 - Architecture checker in `npm run check`: ≤250 lines per source file, no test

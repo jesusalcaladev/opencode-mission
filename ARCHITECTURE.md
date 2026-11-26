@@ -59,6 +59,7 @@ src/
   mission.js               facade for pure modules and persistence
   mission/
     state.js               constants, defaults, task normalization (pure)
+    host-restart.js        pure host-restart decision (WAKE, STOP, backoff, cap)
     cost.js                pure per-session cost merge (monotonic)
     quality.js             mutation/vacuity decision rules (pure)
     locks.js               per-file locks for a shared workspace (pure)
@@ -148,6 +149,9 @@ is rejected and the lease is released for retry.
     wall-clock deadline or `test-erosion`.
 16. Cost is summed across every session of the mission and never decreases; an
     external watchdog only writes `WAKE` — only the live supervisor prompts sessions.
+17. The host supervisor is opt-in: it reacts only to a `WAKE` that stayed stale,
+    never writes `state.json`/criteria/tasks, and is bounded by `STOP`/`PAUSE`,
+    exponential backoff and `max_restarts` per window.
 
 ## Failure model
 

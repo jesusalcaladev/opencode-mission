@@ -32,6 +32,7 @@ nudged back to work. A mission that is genuinely impossible declares `blocked` w
 | `STOP`                    | Kill switch. Presence stops the mission at the next idle boundary                                                                                                         |
 | `PAUSE`                   | Pause at the next idle boundary; resume after removing it                                                                                                                 |
 | `WAKE`                    | External watchdog request. Only the live supervisor consumes it and prompts the lead                                                                                      |
+| `host-restart.json`       | Opt-in host supervisor ledger: `{attempts, window_start, next_at, last_error}`; never written by the plugin                                                               |
 | `mission-queue.json`      | At `missionsRoot`: persistent prioritized queue `{id, objective, priority, status, sessionID, attempts}` for parallel missions                                            |
 
 `expect` is `exit0` (default) or `contains:<text>` (requires exit 0 **and** the substring

@@ -17,6 +17,9 @@ const KEYS = [
   "wake_exists",
   "global_exists",
   "workspace_clean",
+  "restart_marker",
+  "restart_attempts",
+  "restarts",
   "switched_count",
   "model_id",
 ];

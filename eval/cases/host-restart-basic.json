@@ -1,0 +1,16 @@
+{
+  "id": "host-restart-basic",
+  "mode": "host-restart",
+  "objective": "A stale WAKE restarts the host when opted in",
+  "criteria": [{ "id": "ok", "cmd": "node --version", "expect": "exit0", "timeout_ms": 5000 }],
+  "tasks": [],
+  "settings": { "status": "running", "stage": "done", "max_turns": 2 },
+  "max": 3,
+  "command": "node -e \"require('fs').writeFileSync(require('path').join(process.env.MISSION_RESTART_ROOT,'restarted.txt'),'ok')\"",
+  "expect": {
+    "status": "host-restart",
+    "restart_marker": true,
+    "restart_attempts": 1,
+    "restarts": 1
+  }
+}
