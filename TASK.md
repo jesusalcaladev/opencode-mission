@@ -61,7 +61,7 @@ hard caps absolutos, `this.d`, archivos <250 líneas, `npm run quality` verde).
 
 ## Fase 5 · Cierre y verificación
 
-- [x] 5.1 `npm run check`, `npm test`, `npm run quality` (coverage ~86.7/69.1/83.2) en verde: 199 tests + 8 evals end-to-end.
+- [x] 5.1 `npm run check`, `npm test`, `npm run quality` (coverage ~86.7/69.1/83.2) en verde: 201 tests + 11 evals end-to-end.
 - [x] 5.2 `ARCHITECTURE.md`, `CONTRACT.md`, `README.md`, `RUNBOOK.md`, `CHANGELOG.md` actualizados.
 - [x] 5.3 Smoke real: `test/smoke.test.js` corre `demos/cli` con checks ejecutables hasta `complete`.
 - [x] 5.4 Invariantes revisados. Módulos nuevos <250 líneas; `tui/model.js` (311) es deuda previa, `roles-pipeline`/`workers` bajaron respecto al baseline.
@@ -93,9 +93,18 @@ hard caps absolutos, `this.d`, archivos <250 líneas, `npm run quality` verde).
 - [x] 7.7 Docs (`README`, `RUNBOOK`, `CHANGELOG`).
 - [x] 7.8 Arquitectura del runner separada: CLI (`mission-eval.mjs`, 67 líneas) + harness (`eval-harness.mjs`, 230).
 
+## Fase 8 · Calidad de código y arquitectura
+
+- [x] 8.1 Refactor: `turn.js`, `telemetry.js`, `task-splitting.js`, TUI `keymap.ts`/`normalize.js`.
+- [x] 8.2 `src/mission.js` convertido en barrel puro (`export *`), sin listas duplicadas.
+- [x] 8.3 Todos los archivos `src/**` ≤250 líneas (antes: 333/295/272/271/265/260).
+- [x] 8.4 `scripts/check-architecture.mjs` integrado en `npm run check` con tests unitarios.
+- [x] 8.5 3 casos eval nuevos (costo multi-sesión, memoria global, rotación) → 11/11.
+- [x] 8.6 Bug real corregido: costo de workers sobrescrito al completar en el mismo turno.
+
 ## Resultado de ejecución
 
-- 199 tests verdes; `npm run quality` exit 0; `npm run eval` 8/8 exit 0.
+- 201 tests verdes; `npm run quality` exit 0; `npm run eval` 11/11 exit 0.
 - Bug real corregido: `pruneJournalArchives` ordenaba por nombre (sufijo aleatorio) y podía borrar las líneas más nuevas bajo carga; ahora ordena por `mtime`.
 - `demos/cli` tenía un check vacuo (`node --test` sin archivos salía exit 0); ahora exige `contains:pass 3`, por lo que el baseline es rojo y la verificación es real.
 

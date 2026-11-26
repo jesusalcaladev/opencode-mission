@@ -15,7 +15,17 @@ const KEYS = [
   "pending",
   "refused",
   "wake_exists",
+  "global_exists",
+  "switched_count",
+  "model_id",
 ];
+
+const MINIMUMS = {
+  min_checks_green: "checks_green",
+  min_cost_usd: "cost_usd",
+  min_tokens: "tokens",
+  min_turns: "turns",
+};
 
 export function scoreCase(expected = {}, actual = {}) {
   const reasons = [];
@@ -28,6 +38,12 @@ export function scoreCase(expected = {}, actual = {}) {
     } else if (String(got) !== String(want)) {
       reasons.push(`${key}: expected ${want}, got ${got}`);
     }
+  }
+  for (const [key, target] of Object.entries(MINIMUMS)) {
+    const want = expected[key];
+    if (want === undefined || want === null) continue;
+    if (Number(actual[target]) < Number(want))
+      reasons.push(`${target}: expected >= ${want}, got ${actual[target]}`);
   }
   for (const [key, needle] of [
     ["journal_contains", actual.journal],

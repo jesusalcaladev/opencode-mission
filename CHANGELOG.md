@@ -30,8 +30,19 @@ All notable changes to this project are documented here. The format follows
 - Cost is aggregated across lead, workers, roles and direct model calls; it never
   decreases.
 
+### Added
+
+- Architecture checker in `npm run check`: ≤250 lines per source file, no test
+  globals in `src/`, no barrel destructuring in mixins, no terminal writes
+  outside `decide()`/`finish`, and injected eval/CI guardrails.
+- Three more eval cases (multi-session cost, global memory, model rotation) → 11 total.
+- Modularity refactor: main turn loop, telemetry, task splitting, TUI keymap and
+  normalization extracted into focused modules; `src/mission.js` is now a barrel.
+
 ### Fixed
 
+- Worker cost was clobbered when a mission completed in the same turn: the
+  cost snapshot is now refreshed after workers finish (covered by an eval).
 - Journal archives are pruned by modification time instead of filename, so a
   random suffix can no longer cause the newest lines to be deleted under load.
 

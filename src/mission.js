@@ -1,272 +1,29 @@
-// Durable mission state and the compatibility facade for the pure modules.
-// Pure decisions live in src/mission/{state,decide,memory,lease}.js; this file
-// adds filesystem persistence and the v1 -> v2 migration.
+// Durable mission facade. Pure decisions live in src/mission/*; this module is
+// a barrel so callers keep one stable import surface. The architecture checker
+// guarantees the re-exported modules never leak test globals or IO decisions.
 
-import {
-  VERSION,
-  STATUS,
-  TASK_STATUS,
-  FILES,
-  DEFAULT_MAX_TURNS,
-  DEFAULT_BUDGET_USD,
-  DEFAULT_STALL_AFTER_TURNS,
-  JOURNAL_HEADER,
-  JOURNAL_MAX_LINE_CHARS,
-  JOURNAL_MAX_BYTES,
-  JOURNAL_KEEP_ARCHIVES,
-  JOURNAL_TAIL_CHARS,
-  JOURNAL_MEMORY_CHARS,
-  initialState,
-  parseFrontmatter,
-  objectiveOf,
-} from "./mission/state.js";
-import {
-  selectTask,
-  applyTaskResults,
-  captureBaseline,
-  markBaselineRed,
-  verifyingTransition,
-  nextStrategy,
-  decideNext,
-  requirementsMet,
-  allGreen,
-} from "./mission/decide.js";
-import {
-  appendHistory,
-  recentProgress,
-  effortLimit,
-  campaignSettings,
-  HISTORY_LIMIT,
-} from "./mission/autonomy.js";
-import {
-  promptKey,
-  isDuplicatePrompt,
-  recordPrompt,
-  recordHandoff,
-  recoverLeases,
-  pruneRegistry,
-} from "./mission/recovery.js";
-import {
-  initialMetrics,
-  metricsFromState,
-  recordMetric,
-  recordMetrics,
-  metricsLines,
-  METRIC_KEYS,
-} from "./mission/metrics.js";
-import { buildBrief, distill, MEMORY_BUDGET } from "./mission/memory.js";
-import { needsReplan, replanPrompt, afterReplan, STALL_TURNS } from "./mission/watchdog.js";
-import {
-  ROLE,
-  STAGE,
-  canWrite,
-  parseReview,
-  combineReviews,
-  stageFor,
-  roleForStage,
-  parseGaps,
-  MAX_REVIEW_ATTEMPTS,
-} from "./mission/roles.js";
-import {
-  parseFindings,
-  rankFindings,
-  cycleDecision,
-  worthImproving,
-  budgetExhausted,
-} from "./mission/improve.js";
-import { loadProjectInstructions, MAX_INSTRUCTION_CHARS } from "./mission/instructions.js";
-import { upsertFact, renderFacts, MAX_FACTS } from "./mission/facts.js";
-import {
-  DEFAULT_MAX_EXTENSIONS,
-  EXTEND_TURNS,
-  EXTEND_MINUTES,
-  EXTEND_WRITES,
-  parseRoadmap,
-  nextItem,
-  markItemDone,
-  chainDecision,
-  applyExtension,
-  autoExtendDecision,
-  applyAutoExtension,
-  EXTEND_BUDGET_USD,
-  CAMPAIGN_EXTEND_TURNS,
-  CAMPAIGN_EXTEND_WRITES,
-} from "./mission/chain.js";
-import { tokensFromContext, applyTokens, mergeTokenEntries } from "./mission/tokens.js";
-import { forecastBudget } from "./mission/forecast.js";
-import { scoreCase, summarize } from "./mission/eval.js";
-import {
-  QUEUE_FILE,
-  enqueue as queueEnqueue,
-  sortQueue,
-  runningCount,
-  nextBatch,
-  markRunning,
-  markFinished,
-  requeueDead,
-  queueStats,
-} from "./mission/queue.js";
-import { mutationSettings, mutationDecision } from "./mission/quality.js";
-import { normalizeLockPath, lockFiles, unlockFiles, lockedBy } from "./mission/locks.js";
-import { WAKE_FILE, WAKE_AGE_MS, needsWake } from "./mission/wake.js";
-import {
-  GLOBAL_MEMORY_FILE,
-  GLOBAL_MEMORY_BUDGET,
-  mergeGlobalMemory,
-} from "./mission/global-memory.js";
-import {
-  costFromContext,
-  mergeCosts,
-  applyCost,
-  generationCost,
-  sessionIDsForMission,
-} from "./mission/cost.js";
-import {
-  migrateV1,
-  fromTasks,
-  toTasks,
-  claim,
-  renew,
-  release,
-  fail,
-  expired,
-  isLeased,
-  retryable,
-  attemptLimit,
-  LEASE_MS,
-  MAX_ATTEMPTS,
-} from "./mission/lease.js";
-
-export {
-  VERSION,
-  STATUS,
-  TASK_STATUS,
-  FILES,
-  DEFAULT_MAX_TURNS,
-  DEFAULT_BUDGET_USD,
-  DEFAULT_STALL_AFTER_TURNS,
-  JOURNAL_HEADER,
-  JOURNAL_MAX_LINE_CHARS,
-  JOURNAL_MAX_BYTES,
-  JOURNAL_KEEP_ARCHIVES,
-  JOURNAL_TAIL_CHARS,
-  JOURNAL_MEMORY_CHARS,
-  initialState,
-  parseFrontmatter,
-  objectiveOf,
-  selectTask,
-  applyTaskResults,
-  captureBaseline,
-  markBaselineRed,
-  verifyingTransition,
-  nextStrategy,
-  decideNext,
-  requirementsMet,
-  allGreen,
-  appendHistory,
-  recentProgress,
-  effortLimit,
-  campaignSettings,
-  HISTORY_LIMIT,
-  promptKey,
-  isDuplicatePrompt,
-  recordPrompt,
-  recordHandoff,
-  recoverLeases,
-  pruneRegistry,
-  initialMetrics,
-  metricsFromState,
-  recordMetric,
-  recordMetrics,
-  metricsLines,
-  METRIC_KEYS,
-  buildBrief,
-  distill,
-  MEMORY_BUDGET,
-  needsReplan,
-  replanPrompt,
-  afterReplan,
-  STALL_TURNS,
-  ROLE,
-  STAGE,
-  canWrite,
-  parseReview,
-  combineReviews,
-  stageFor,
-  roleForStage,
-  parseGaps,
-  MAX_REVIEW_ATTEMPTS,
-  parseFindings,
-  rankFindings,
-  cycleDecision,
-  worthImproving,
-  budgetExhausted,
-  loadProjectInstructions,
-  MAX_INSTRUCTION_CHARS,
-  upsertFact,
-  renderFacts,
-  MAX_FACTS,
-  DEFAULT_MAX_EXTENSIONS,
-  EXTEND_TURNS,
-  EXTEND_MINUTES,
-  EXTEND_WRITES,
-  parseRoadmap,
-  nextItem,
-  markItemDone,
-  chainDecision,
-  applyExtension,
-  autoExtendDecision,
-  applyAutoExtension,
-  EXTEND_BUDGET_USD,
-  CAMPAIGN_EXTEND_TURNS,
-  CAMPAIGN_EXTEND_WRITES,
-  migrateV1,
-  fromTasks,
-  toTasks,
-  claim,
-  renew,
-  release,
-  fail,
-  expired,
-  isLeased,
-  retryable,
-  attemptLimit,
-  LEASE_MS,
-  MAX_ATTEMPTS,
-  costFromContext,
-  mergeCosts,
-  applyCost,
-  generationCost,
-  sessionIDsForMission,
-  tokensFromContext,
-  applyTokens,
-  mergeTokenEntries,
-  forecastBudget,
-  scoreCase,
-  summarize,
-  QUEUE_FILE,
-  queueEnqueue,
-  sortQueue,
-  runningCount,
-  nextBatch,
-  markRunning,
-  markFinished,
-  requeueDead,
-  queueStats,
-  mutationSettings,
-  mutationDecision,
-  normalizeLockPath,
-  lockFiles,
-  unlockFiles,
-  lockedBy,
-  WAKE_FILE,
-  WAKE_AGE_MS,
-  needsWake,
-  GLOBAL_MEMORY_FILE,
-  GLOBAL_MEMORY_BUDGET,
-  mergeGlobalMemory,
-};
-
+export * from "./mission/state.js";
+export * from "./mission/decide.js";
+export * from "./mission/autonomy.js";
+export * from "./mission/recovery.js";
+export * from "./mission/metrics.js";
+export * from "./mission/memory.js";
+export * from "./mission/watchdog.js";
+export * from "./mission/roles.js";
+export * from "./mission/improve.js";
+export * from "./mission/instructions.js";
+export * from "./mission/facts.js";
+export * from "./mission/chain.js";
+export * from "./mission/lease.js";
+export * from "./mission/cost.js";
+export * from "./mission/quality.js";
+export * from "./mission/locks.js";
+export * from "./mission/wake.js";
+export * from "./mission/global-memory.js";
+export * from "./mission/tokens.js";
+export * from "./mission/forecast.js";
+export * from "./mission/eval.js";
+export * from "./mission/queue.js";
 export * from "./mission/persistence.js";
 export * from "./mission/bootstrap.js";
 export * from "./mission/journal.js";

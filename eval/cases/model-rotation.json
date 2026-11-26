@@ -1,0 +1,10 @@
+{
+  "id": "model-rotation",
+  "mode": "rotation",
+  "objective": "Quota errors rotate to a free tools-capable model",
+  "expect": {
+    "status": "rotation",
+    "switched_count": 1,
+    "model_id": "free-1"
+  }
+}

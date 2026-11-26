@@ -13,9 +13,12 @@ paths under `.mission/`).
 src/
   index.js                 OpenCode adapter: commands, hooks, provider registration
   tool-definitions.js      mission_* tool registration (extracted from index)
-  supervisor.js            thin coordinator: constructor + THE main turn loop
+  supervisor.js            thin coordinator: constructor + prototype assembly
   supervisor/
-    cost.js                aggregate cost across lead/workers/roles/generate
+    turn.js                THE main turn loop (single owner of the turn flow)
+    telemetry.js           turn metrics, journal line and status text
+    task-splitting.js      decompose a stuck task into verifiable subtasks
+    cost.js                aggregate cost/tokens across all mission sessions
     quality.js             optional mutation (negative-control) runner
     verification.js        turn check results into task completion + baseline
     reviews.js             two independent reviewers with distinct models
@@ -75,7 +78,9 @@ src/
     journal.js             append-only journal with rotation
   tui.tsx                  TUI plugin setup (single sidebar slot + dashboard route)
   tui/
+    keymap.ts              palette/keybind commands (extracted from tui.tsx)
     model.js               read model (pure, reads durable files)
+    normalize.js           pure check/task/agent/requirement normalization
     format.js              formatters (pure)
     registry.js            mission discovery
     types.ts               shared types + store hook
@@ -133,7 +138,11 @@ is rejected and the lease is released for retry.
 12. Research network tools refuse private/loopback addresses and non-http schemes.
 13. Every supervisor mixin reaches dependencies only through `this.d`; no mixin
     destructures the barrel. No source file exceeds 250 lines.
-14. `npm run quality` (syntax, lint, format, typecheck, coverage) must stay green.
+14. `npm run quality` (syntax + architecture, lint, format, typecheck, coverage) must stay green.
+    `scripts/check-architecture.mjs` enforces ≤250 lines/source file, no test globals in `src/`,
+    no barrel-destructuring in mixins, no terminal writes outside `decide()`/`finish`, and the
+    presence of the `.mission/` write guard and the eval gate in CI. All
+    `src/**` files are free of test imports.
 15. A check green at baseline cannot complete a task; re-plan/goal-audit checks start
     red. `relentless` may extend soft ceilings but never `STOP`, `PAUSE`, hard budget,
     wall-clock deadline or `test-erosion`.

@@ -17,7 +17,7 @@ export const queueManager = {
 
   async enqueueMission(objective, priority = 0) {
     const entries = await this.loadQueue();
-    const next = this.d.queueEnqueue(entries, objective, priority);
+    const next = this.d.enqueue(entries, objective, priority);
     if (next.length === entries.length) return "Objective must be at least 3 characters.";
     await this.saveQueue(next);
     return `Queued #${next.find((e) => !entries.some((old) => old.id === e.id))?.id}: ${String(objective).trim().slice(0, 120)}`;

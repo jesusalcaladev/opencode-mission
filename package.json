@@ -57,7 +57,7 @@
     "typescript": "^5.7.2"
   },
   "scripts": {
-    "check": "node scripts/check-syntax.mjs",
+    "check": "node scripts/check-syntax.mjs && node scripts/check-architecture.mjs",
     "test": "node --test test/*.test.js",
     "test:watch": "node --test --watch test/*.test.js",
     "lint": "eslint .",

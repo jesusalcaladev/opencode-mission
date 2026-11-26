@@ -1,0 +1,32 @@
+{
+  "id": "global-memory",
+  "mode": "mission",
+  "objective": "Distilled decisions reach GLOBAL_MEMORY.md",
+  "criteria": [{ "id": "done", "cmd": "test -f done.txt", "expect": "exit0", "timeout_ms": 5000 }],
+  "tasks": [
+    {
+      "id": 1,
+      "subject": "Create done.txt",
+      "status": "pending",
+      "blocked_by": [],
+      "verify": "done",
+      "files": ["done.txt"]
+    }
+  ],
+  "settings": {
+    "autonomy": "standard",
+    "continuous_improvement": false,
+    "max_turns": 4,
+    "handoff_every_turns": 0,
+    "enableWorkers": false,
+    "enableRoles": false,
+    "stage": "done",
+    "global_memory": true
+  },
+  "expect": {
+    "status": "aborted",
+    "finish_reason": "max-turns",
+    "turns": 4,
+    "global_exists": true
+  }
+}

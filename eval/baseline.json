@@ -1,16 +1,16 @@
 {
   "version": 1,
   "summary": {
-    "total": 8,
-    "passed": 8,
+    "total": 11,
+    "passed": 11,
     "failed": 0,
     "success_rate": 1,
-    "avg_turns": 1.5,
-    "avg_checks_green": 0.75,
+    "avg_turns": 1.55,
+    "avg_checks_green": 0.73,
     "hard_stops": {
-      "max-turns": 3,
-      "all criteria green": 2,
-      "verified": 2,
+      "max-turns": 4,
+      "all criteria green": 3,
+      "verified": 3,
       "token-budget": 1
     }
   },
@@ -22,6 +22,15 @@
       "pass": true
     },
     "cli-standard": {
+      "pass": true
+    },
+    "cost-multi-session": {
+      "pass": true
+    },
+    "global-memory": {
+      "pass": true
+    },
+    "model-rotation": {
       "pass": true
     },
     "parallel-queue": {

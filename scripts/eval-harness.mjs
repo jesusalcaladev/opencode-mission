@@ -147,6 +147,9 @@ async function runMission(testCase, base, maxTurns) {
   const checks = Array.isArray(state.last_checks) ? state.last_checks : [];
   const journal = await readFile(path.join(missionDir(root), "journal.md"), "utf8").catch(() => "");
   const wakeExists = await exists(path.join(missionDir(root), "WAKE"));
+  const globalExists = await exists(path.join(base, "GLOBAL_MEMORY.md"));
+  const costUsd = Number(state.cost_usd) || 0;
+  const tokens = Number(state.tokens) || 0;
   const scored = scoreCase(testCase.expect ?? {}, {
     status: state.status,
     finish_reason: state.finish_reason ?? "",
@@ -159,6 +162,9 @@ async function runMission(testCase, base, maxTurns) {
     review_attempts: state.review_attempts ?? 0,
     refused: checks.some((c) => c.refused === true),
     wake_exists: wakeExists,
+    global_exists: globalExists,
+    cost_usd: costUsd,
+    tokens,
     journal,
     prompts: ctx.prompts.join("\n"),
   });
@@ -177,6 +183,28 @@ async function runMission(testCase, base, maxTurns) {
     review_attempts: state.review_attempts ?? 0,
     refused: checks.some((c) => c.refused === true),
     wake_exists: wakeExists,
+    global_exists: globalExists,
+    cost_usd: costUsd,
+    tokens,
+  };
+}
+
+async function runRotationCase(testCase, base) {
+  const ctx = fakeCtx(base, testCase);
+  const sup = new Supervisor(ctx, { missionsRoot: base });
+  await sup.rotateModel("lead", "quota 429 rate limit");
+  const scored = scoreCase(testCase.expect ?? {}, {
+    status: "rotation",
+    switched_count: ctx.switched.length,
+    model_id: String(ctx.switched[0]?.id ?? ""),
+  });
+  sup.dispose();
+  return {
+    id: testCase.id,
+    ...scored,
+    status: "rotation",
+    switched_count: ctx.switched.length,
+    model_id: String(ctx.switched[0]?.id ?? ""),
   };
 }
 
@@ -212,10 +240,13 @@ export async function runCase(testCase, maxTurns = 24) {
   const base = await mkdtemp(path.join(os.tmpdir(), "mission-eval-"));
   const started = Date.now();
   try {
-    const result =
-      testCase.mode === "queue"
-        ? await runQueueCase(testCase, base)
-        : await runMission(testCase, base, maxTurns);
+    const runners = {
+      queue: () => runQueueCase(testCase, base),
+      rotation: () => runRotationCase(testCase, base),
+      mission: () => runMission(testCase, base, maxTurns),
+      wake: () => runMission(testCase, base, maxTurns),
+    };
+    const result = await (runners[testCase.mode] ?? runners.mission)();
     return { ...result, ms: Date.now() - started };
   } catch (err) {
     return {

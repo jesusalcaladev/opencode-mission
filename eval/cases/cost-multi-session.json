@@ -1,0 +1,44 @@
+{
+  "id": "cost-multi-session",
+  "mode": "mission",
+  "objective": "Worker cost is included in the mission budget",
+  "criteria": [
+    { "id": "a", "cmd": "test -f a.txt", "expect": "exit0", "timeout_ms": 5000 },
+    { "id": "b", "cmd": "test -f b.txt", "expect": "exit0", "timeout_ms": 5000 }
+  ],
+  "tasks": [
+    {
+      "id": 1,
+      "subject": "Create a.txt",
+      "status": "pending",
+      "blocked_by": [],
+      "verify": "a",
+      "files": ["a.txt"]
+    },
+    {
+      "id": 2,
+      "subject": "Create b.txt",
+      "status": "pending",
+      "blocked_by": [],
+      "verify": "b",
+      "files": ["b.txt"]
+    }
+  ],
+  "settings": {
+    "autonomy": "standard",
+    "continuous_improvement": false,
+    "max_turns": 6,
+    "handoff_every_turns": 0,
+    "enableWorkers": true,
+    "enableRoles": false,
+    "maxWorkers": 2,
+    "stage": "done"
+  },
+  "policy": { "write": { "a.txt": "a\n", "b.txt": "b\n" } },
+  "expect": {
+    "status": "complete",
+    "checks_green": 2,
+    "tasks_done": 2,
+    "min_cost_usd": 0.02
+  }
+}
