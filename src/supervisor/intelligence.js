@@ -75,6 +75,7 @@ export const intelligence = {
           `RECENT JOURNAL:\n${journal}`,
         ].join("\n\n");
         const out = await this.options.generate({ prompt, model: this.options.fastModel });
+        this.noteGeneration(root, out);
         const text = typeof out === "string" ? out : (out?.text ?? out?.data?.text ?? "");
         if (text.trim().length > 20) {
           distilled = {
@@ -96,8 +97,18 @@ export const intelligence = {
     );
   },
 
-  async maybeReplan(root, state, results, tasks) {
-    if (!this.d.needsReplan(state) || !this.options.generate) return false;
+  async maybeReplan(root, state, results, tasks, force = false) {
+    if (!force && (!this.d.needsReplan(state) || !this.options.generate)) return false;
+    if (!this.options.generate) {
+      // A blocked verdict must still break the loop when no planner model is
+      // wired: reset the strategy so the next turn tries a different approach.
+      Object.assign(state, this.d.afterReplan(state, state.turn));
+      state.failures = 0;
+      await this.saveStateSafe(root, state);
+      await this.d.appendJournal(root, `blocked verdict → forced retry at turn ${state.turn}`);
+      await this.notify("blocked-replan", "Relentless mission re-planned after a blocked verdict.");
+      return true;
+    }
     const [missionText, memory, journal] = await Promise.all([
       this.readMission(root),
       this.d.loadMemory(root),
@@ -113,6 +124,7 @@ export const intelligence = {
     let text = "";
     try {
       const out = await this.options.generate({ prompt, model: await this.pickPlannerModel() });
+      this.noteGeneration(root, out);
       text = typeof out === "string" ? out : (out?.text ?? out?.data?.text ?? "");
     } catch (err) {
       await this.journal(root, `re-plan request failed: ${this.d.shortError(err)}`);
@@ -160,6 +172,11 @@ export const intelligence = {
       }),
       this.saveProgressSafe(root, this.d.fromTasks(planned)),
     ]);
+    state.check_baseline = this.d.markBaselineRed(
+      state.check_baseline ?? {},
+      parsed.plan.checks.map((c) => c.id),
+      true
+    );
     const next = this.d.afterReplan(state, state.turn);
     Object.assign(state, next);
     await this.saveStateSafe(root, state);
@@ -167,6 +184,8 @@ export const intelligence = {
       root,
       `re-plan applied at turn ${state.turn}: ${parsed.plan.checks.length} checks, ${planned.length} tasks (strategy reset to 1)`
     );
+    if (force)
+      await this.notify("blocked-replan", "Relentless mission re-planned after a blocked verdict.");
     return true;
   },
 };

@@ -59,16 +59,18 @@ export function stageFor({
   tasksDone,
   review,
   reviewAttempts = 0,
+  maxReviewAttempts = MAX_REVIEW_ATTEMPTS,
   goalAudit = false,
   goalAuditDone = false,
   extended = false,
 }) {
+  const reviewExhausted = maxReviewAttempts > 0 && reviewAttempts >= maxReviewAttempts;
   if (stage === STAGE.DONE) return { stage: STAGE.DONE, decision: "complete" };
   if (!tasksDone) return { stage: STAGE.IMPLEMENT, decision: "continue" };
   if (!extended) {
     if (stage !== STAGE.REVIEW) return { stage: STAGE.REVIEW, decision: "continue" };
     if (review?.ok) return { stage: STAGE.DONE, decision: "complete" };
-    if (reviewAttempts < MAX_REVIEW_ATTEMPTS) return { stage: STAGE.IMPLEMENT, decision: "retry" };
+    if (!reviewExhausted) return { stage: STAGE.IMPLEMENT, decision: "retry" };
     return { stage: STAGE.REVIEW, decision: "blocked", reason: "review: unresolved high severity" };
   }
   if (stage === STAGE.INVESTIGATE) return { stage: STAGE.IMPLEMENT, decision: "continue" };
@@ -77,7 +79,7 @@ export function stageFor({
   if (stage === STAGE.VERIFY) return { stage: STAGE.REVIEW, decision: "continue" };
   if (stage !== STAGE.REVIEW && stage !== STAGE.GOAL_AUDIT)
     return { stage: STAGE.REVIEW, decision: "continue" };
-  if (review && review.ok === false && reviewAttempts < MAX_REVIEW_ATTEMPTS) {
+  if (review && review.ok === false && !reviewExhausted) {
     return { stage: STAGE.IMPLEMENT, decision: "retry" };
   }
   if (review && review.ok === false) {

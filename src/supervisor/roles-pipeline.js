@@ -5,38 +5,14 @@
 const AGENT_RUN_LIMIT = 200;
 
 export const rolesPipeline = {
-  async dispatchReviewPair(sessionID, root, state, objective, results) {
-    const prompt = this.d.reviewerPrompt({
-      objective,
-      workspace: root,
-      checks: results.map((r) => ({ id: r.id })),
-    });
-    await Promise.all([
-      this.dispatchRoleStage(sessionID, root, this.d.ROLE.REVIEWER, prompt),
-      this.dispatchRoleStage(sessionID, root, "reviewer2", prompt),
-    ]);
-    const fresh = await this.d.loadState(root);
-    const first = fresh.stage_reports?.reviewer?.text ?? state.stage_reports?.reviewer?.text ?? "";
-    const second =
-      fresh.stage_reports?.reviewer2?.text ?? state.stage_reports?.reviewer2?.text ?? "";
-    state.stage_reports = state.stage_reports ?? {};
-    state.stage_reports.review = {
-      text: this.d.combineReviews(first, second),
-      at: new Date().toISOString(),
-    };
-    await this.saveStateSafe(root, state);
-    await this.journal(
-      root,
-      "two independent reviewers completed in parallel; completion held until review is clean"
-    );
-  },
-
-  async dispatchRoleStage(sessionID, root, role, promptText) {
+  async dispatchRoleStage(sessionID, root, role, promptText, modelOverride = null) {
+    const chosen =
+      modelOverride ?? this.modelForRole(role) ?? this.pickFreeModel(await this.modelCatalog());
     const created = await this.ctx.session.create({
       parentID: sessionID,
       title: `mission ${role}`,
       location: { directory: this.ctx.location.directory },
-      model: this.modelForRole(role) ?? this.pickFreeModel(await this.modelCatalog()),
+      model: chosen,
     });
     const id = created?.id ?? created?.data?.id;
     if (!id) return null;
@@ -52,7 +28,7 @@ export const rolesPipeline = {
     try {
       await this.serialize(root, async () => {
         const s = await this.d.loadState(root);
-        const model = this.modelForRole(role);
+        const model = chosen;
         s.agent_runs = [
           ...(s.agent_runs ?? []).filter((r) => r.sessionID !== id),
           {
@@ -118,6 +94,7 @@ export const rolesPipeline = {
         }),
         model: this.options.fastModel,
       });
+      this.noteGeneration(root, out);
       text = typeof out === "string" ? out : (out?.text ?? out?.data?.text ?? "");
     } catch {
       return false;
@@ -209,6 +186,7 @@ export const rolesPipeline = {
       tasksDone: tasks.length > 0 && tasks.every((t) => t.status === this.d.TASK_STATUS.COMPLETED),
       review: this.d.parseReview(reviewText),
       reviewAttempts: state.review_attempts ?? 0,
+      maxReviewAttempts: this.d.effortLimit(state.max_review_attempts, this.d.MAX_REVIEW_ATTEMPTS),
       goalAudit: extended && state.goal_audit === true,
       goalAuditDone: state.goal_audit_done === true,
       extended,
@@ -272,9 +250,17 @@ export const rolesPipeline = {
       return { type: "continue" };
     }
 
-    if (next.decision === "blocked") return { type: "stop", reason: "review-high" };
-    if (next.decision === "retry") {
-      state.review_attempts = (state.review_attempts ?? 0) + 1;
+    if (next.decision === "blocked" && state.never_give_up) {
+      await this.journal(root, "relentless: review-high → unlimited rework");
+      await this.notify(
+        "review-rework",
+        "Relentless mission is reworking unresolved review findings."
+      );
+    }
+    if (next.decision === "blocked" && !state.never_give_up)
+      return { type: "stop", reason: "review-high" };
+    if (next.decision === "retry" || next.decision === "blocked") {
+      state.review_attempts = next.decision === "blocked" ? 0 : (state.review_attempts ?? 0) + 1;
       state.stage = this.d.STAGE.IMPLEMENT;
       state.phase = this.d.STAGE.IMPLEMENT;
       const stored = await this.d.loadTasks(root);

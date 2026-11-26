@@ -39,12 +39,20 @@ export const goalAudit = {
     state.goal_audits = (state.goal_audits ?? 0) + 1;
     state.metrics = this.d.recordMetric(state.metrics, "goalAudits", 1);
     delete state.stage_reports["goal-auditor"];
-    if (state.goal_audits >= (state.max_goal_audits ?? 3)) {
+    const maxAudits = this.d.effortLimit(state.max_goal_audits, 3);
+    if (maxAudits > 0 && state.goal_audits >= maxAudits) {
       await this.journal(
         root,
         `goal audit found ${gaps.length} unresolved gap(s) after ${state.goal_audits} rounds`
       );
-      return { type: "stop", reason: "goal-gaps" };
+      if (!state.never_give_up) return { type: "stop", reason: "goal-gaps" };
+      await this.journal(root, "relentless: goal gaps persist → rework again");
+      await this.notify("goal-gaps", `Relentless mission still has ${gaps.length} goal gap(s).`);
+      state.goal_audits = 0;
+      state.stage = this.d.STAGE.IMPLEMENT;
+      state.phase = this.d.STAGE.IMPLEMENT;
+      await this.saveStateSafe(root, state);
+      return { type: "continue" };
     }
 
     const tasks = await this.d.loadTasks(root);
@@ -88,6 +96,11 @@ export const goalAudit = {
       });
       nextId += 1;
     }
+    state.check_baseline = this.d.markBaselineRed(
+      state.check_baseline ?? {},
+      criteriaData.checks.map((c) => c.id),
+      true
+    );
     state.stage = this.d.STAGE.IMPLEMENT;
     state.phase = this.d.STAGE.IMPLEMENT;
     await Promise.all([

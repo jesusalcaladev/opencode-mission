@@ -32,7 +32,7 @@ export const improvements = {
       cleanRounds: state.clean_audit_rounds ?? 0,
       maxCleanRounds: state.max_clean_audit_rounds ?? 2,
       stopFile: await this.d.stopRequested(root),
-      outOfBudget: state.cost_usd >= state.budget_usd,
+      outOfBudget: this.d.budgetExhausted(state),
     });
 
     if (decision.type === "stop") {

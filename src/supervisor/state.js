@@ -52,6 +52,7 @@ export const state = {
 
   dispose() {
     if (this.rescueTimer) clearInterval(this.rescueTimer);
+    if (this.wakeTimer) clearInterval(this.wakeTimer);
     for (const timer of this.timers) clearTimeout(timer);
     this.timers.clear();
     this.pendingTicks?.clear();

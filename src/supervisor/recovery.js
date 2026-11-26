@@ -1,4 +1,3 @@
-/* eslint-disable no-unused-vars -- shared preamble / compatibility signature */
 // recovery mixin — extracted from supervisor.js; behavior unchanged.
 
 export const recovery = {
@@ -26,6 +25,7 @@ export const recovery = {
     const progress = await this.d.loadProgress(root);
     if (progress.length === 0) return;
     const now = Date.now();
+    const limit = this.taskAttemptLimit(state);
     let changed = false;
     for (const p of progress) {
       if (p?.status !== this.d.TASK_STATUS.IN_PROGRESS) continue;
@@ -38,7 +38,8 @@ export const recovery = {
           progress,
           p.id,
           `worker did not survive restart (${session?.outcome ?? "missing"})`,
-          now
+          now,
+          limit
         );
         changed = true;
       }
@@ -55,7 +56,7 @@ export const recovery = {
       for (const t of stored) {
         const entry = progress.find((p) => p.id === t.id);
         if (entry && entry.status === this.d.TASK_STATUS.FAILED) {
-          t.status = this.d.retryable(progress, t.id)
+          t.status = this.d.retryable(progress, t.id, limit)
             ? this.d.TASK_STATUS.PENDING
             : this.d.TASK_STATUS.FAILED;
         }
@@ -164,6 +165,39 @@ export const recovery = {
     }
   },
 
+  async recoverFromError(sessionID, err) {
+    const root = this.rootFor(sessionID);
+    if (!root) return;
+    try {
+      const current = await this.d.loadState(root);
+      if (current.status !== this.d.STATUS.RUNNING) return;
+      await this.journal(root, `supervisor error: ${this.d.shortError(err)}`).catch(() => {});
+      if (current.never_give_up) {
+        current.status = this.d.STATUS.RUNNING;
+        current.failures = 0;
+        current.finish_reason = null;
+        current.last_prompt_at = 0;
+        await this.saveStateSafe(root, current);
+        await this.notify(
+          "supervisor-recovery",
+          `Relentless mission recovered from: ${this.d.shortError(err)}`
+        );
+        this.scheduleLeadTick(sessionID);
+        return;
+      }
+      current.status = this.d.STATUS.ABORTED;
+      current.finish_reason = `supervisor error: ${this.d.shortError(err)}`;
+      current.finished_at = new Date().toISOString();
+      await this.saveStateSafe(root, current);
+    } catch (inner) {
+      // Keep the original failure visible even when the state file is unwritable.
+      await this.journal(
+        root,
+        `supervisor error: ${this.d.shortError(err)} (recovery failed: ${this.d.shortError(inner)})`
+      ).catch(() => {});
+    }
+  },
+
   startEventRecovery() {
     const signal = this.controller.signal;
     void (async () => {
@@ -183,112 +217,5 @@ export const recovery = {
         // Stream closed on dispose.
       }
     })();
-  },
-
-  async handleFailure(sessionID, error) {
-    const root = this.rootFor(sessionID);
-    if (!root) return;
-    if (this.workers.has(sessionID) || this.knownWorkers.has(sessionID)) {
-      const progress = await this.d.loadProgress(root);
-      const worker = this.workers.get(sessionID);
-      const owned =
-        progress.find((p) => p.owner === sessionID) ??
-        (worker ? progress.find((p) => p.id === worker.taskId) : null);
-      if (owned) {
-        this.d.fail(progress, owned.id, this.d.shortError(error), Date.now());
-        await this.saveProgressSafe(root, progress);
-        await this.journal(
-          root,
-          `worker failure on task #${owned.id}: ${this.d.shortError(error)} → lease released for retry`
-        );
-      }
-      return;
-    }
-    const state = await this.d.loadState(root);
-    if (state.status !== this.d.STATUS.RUNNING || this.busy.has(sessionID)) return;
-
-    // OpenCode can emit both `failed` and `interrupted` for one turn. Count
-    // only one failure per short window so a single error cannot abort a mission.
-    const now = Date.now();
-    if (state.last_failure_at && now - state.last_failure_at < 1500) return;
-    state.last_failure_at = now;
-
-    const message = this.d.shortError(error);
-    state.failures = (state.failures ?? 0) + 1;
-    state.metrics = this.d.recordMetric(state.metrics, "failures", 1);
-    await this.journal(
-      root,
-      `execution failure ${state.failures}/${state.max_failures}: ${message}`
-    );
-    if (state.failures >= (state.max_failures ?? 3)) {
-      await this.finish(
-        root,
-        sessionID,
-        state,
-        "aborted",
-        "repeated-execution-failure",
-        `after ${state.failures} failures: ${message}`
-      );
-      return;
-    }
-
-    await this.rotateModel(sessionID, message);
-    state.last_prompt_at = Date.now();
-    await this.saveStateSafe(root, state);
-
-    const delayMs = Math.min(2000 * 2 ** (state.failures - 1), 30_000);
-    const timer = setTimeout(async () => {
-      this.timers.delete(timer);
-      try {
-        const fresh = await this.d.loadState(root);
-        if (fresh.status !== this.d.STATUS.RUNNING) return;
-        const key = this.d.promptKey("recovery", sessionID, String(fresh.failures));
-        if (this.d.isDuplicatePrompt(fresh, key)) return;
-        fresh.prompt_ledger = this.d.recordPrompt(fresh, { key, kind: "recovery", sessionID });
-        await this.journal(root, `retrying after ${delayMs}ms backoff`);
-        await this.saveStateSafe(root, fresh);
-        await this.refreshBrief(sessionID, root, fresh.last_checks ?? []);
-        await this.ctx.session.prompt({
-          sessionID,
-          text: `[MISSION RECOVERY] The previous turn failed (${message}). Continue from the mission state; do not declare done without green checks.`,
-          delivery: "queue",
-        });
-      } catch {
-        // The next restart auto-resume will pick it up.
-      }
-    }, delayMs);
-    this.timers.add(timer);
-  },
-
-  async rotateModel(sessionID, message) {
-    if (!/(quota|402|credits|rate.?limit|429|overloaded)/i.test(message)) return;
-    const fallback = this.options.fallbackModel;
-    try {
-      if (fallback?.providerID && fallback?.id) {
-        await this.ctx.session.switchModel({ sessionID, model: fallback });
-        await this.d.appendJournal(
-          this.rootFor(sessionID),
-          `model rotated to ${fallback.providerID}/${fallback.id} (configured fallback)`
-        );
-        return;
-      }
-      const session = await this.ctx.session.get({ sessionID });
-      let current = session?.model;
-      if (!current) {
-        const def = await this.ctx.model.default().catch(() => null);
-        if (def?.providerID) current = { providerID: def.providerID, id: def.id ?? def.modelID };
-      }
-      const catalog = await this.modelCatalog();
-      const candidate = this.pickFreeModel(catalog, current);
-      if (candidate) {
-        await this.ctx.session.switchModel({ sessionID, model: candidate });
-        await this.d.appendJournal(
-          this.rootFor(sessionID),
-          `model rotated ${current?.providerID ?? "?"}/${current?.id ?? "?"} → ${candidate.providerID}/${candidate.id} after quota error`
-        );
-      }
-    } catch {
-      // Rotation is best-effort; the failure counter is the real backstop.
-    }
   },
 };

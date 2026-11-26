@@ -2,14 +2,19 @@
 // All dependencies are reached through this.d (set by the Supervisor).
 
 export const decisions = {
-  async reclaimExpiredLeases(root, progress, now = Date.now()) {
+  taskAttemptLimit(state) {
+    return this.d.attemptLimit(state);
+  },
+
+  async reclaimExpiredLeases(root, progress, state = null, now = Date.now()) {
     const overdue = this.d.expired(progress, now);
     if (overdue.length === 0) return;
-    for (const id of overdue) this.d.fail(progress, id, "lease expired", now);
+    const limit = this.taskAttemptLimit(state);
+    for (const id of overdue) this.d.fail(progress, id, "lease expired", now, limit);
     const stored = await this.d.loadTasks(root);
     for (const task of stored) {
       if (overdue.includes(task.id)) {
-        task.status = this.d.retryable(progress, task.id)
+        task.status = this.d.retryable(progress, task.id, limit)
           ? this.d.TASK_STATUS.PENDING
           : this.d.TASK_STATUS.FAILED;
       }
@@ -37,6 +42,8 @@ export const decisions = {
         root,
         `auto-extended ${state.extensions}/${state.max_extensions} after ${auto.reason} · turns ${state.max_turns} · budget $${state.budget_usd.toFixed(2)}`
       );
+      if (state.never_give_up)
+        await this.notify("budget-extension", `Relentless mission extended after ${auto.reason}.`);
       return { type: "continue" };
     }
 
@@ -124,9 +131,13 @@ export const decisions = {
       targetSession !== sessionID
         ? "[FRESH CONTEXT] You are in a new session. The journal on disk is your memory."
         : "";
+    const relentlessNote = state.never_give_up
+      ? "NEVER GIVE UP: blocked verdicts trigger a re-plan, reviews trigger rework, and failed tasks are retried. Only STOP/PAUSE, hard budget, wall-clock or test erosion can end this mission."
+      : "";
     return [
       `[MISSION SUPERVISOR · turn ${state.turn}/${state.max_turns}]`,
       handoffNote,
+      relentlessNote,
       `Harness re-ran the criteria: ${results.filter((r) => r.ok).length}/${results.length} green.`,
       failing ? `Failing checks:\n${failing}` : "All checks green; finishing verification.",
       task ? `Next task: #${task.id} ${task.subject}` : "All tasks complete.",

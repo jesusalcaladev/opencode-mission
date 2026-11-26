@@ -22,7 +22,7 @@
     {
       "id": "tests",
       "cmd": "node --test",
-      "expect": "exit0",
+      "expect": "contains:pass 3",
       "timeout_ms": 30000
     }
   ],

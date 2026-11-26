@@ -137,9 +137,18 @@ test("supervisor: red check -> nudge -> agent writes file -> green -> complete",
 
     await sup.handleIdle("ses_test");
     state = await loadState(root);
-    assert.equal(state.status, "complete", `unexpected finish: ${state.finish_reason}`);
+    assert.equal(
+      state.status,
+      "complete",
+      `unexpected finish: ${state.finish_reason} ${JSON.stringify({
+        baseline: state.check_baseline,
+        checks: state.last_checks,
+        tasks: (await loadTasks(root)).map((t) => [t.id, t.status]),
+      })}`
+    );
     assert.equal(state.finish_reason, "all criteria green");
-    assert.equal(state.cost_usd, 0.01);
+    // Lead + dispatched worker: cost is aggregated across all mission sessions.
+    assert.equal(state.cost_usd, 0.02);
     const tasks = await loadTasks(root);
     assert.equal(tasks[0].status, "completed");
     assert.match(ctx.synthetic.at(-1), /MISSION COMPLETE/);
@@ -215,6 +224,27 @@ test("supervisor: two failure events for one turn count once", async () => {
     await sup.handleFailure("ses_test", new Error("boom"));
     await sup.handleFailure("ses_test", new Error("boom"));
     assert.equal((await loadState(root)).failures, 1);
+    sup.dispose();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("supervisor: a successful idle clears consecutive failures", async () => {
+  const root = await fixture();
+  try {
+    const ctx = fakeCtx({
+      onPrompt: async (text) => {
+        if (text.startsWith("[MISSION SUPERVISOR"))
+          await writeFile(path.join(root, "done.txt"), "");
+      },
+    });
+    const sup = new Supervisor(ctx);
+    await sup.start("ses_test", root);
+    await sup.handleFailure("ses_test", new Error("boom"));
+    assert.equal((await loadState(root)).failures, 1);
+    await sup.handleIdle("ses_test");
+    assert.equal((await loadState(root)).failures, 0);
     sup.dispose();
   } finally {
     await rm(root, { recursive: true, force: true });

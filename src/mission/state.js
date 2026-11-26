@@ -20,6 +20,8 @@ export const TASK_STATUS = Object.freeze({
 export const DEFAULT_MAX_TURNS = 12;
 export const DEFAULT_BUDGET_USD = 5;
 export const DEFAULT_STALL_AFTER_TURNS = 2;
+export const DEFAULT_MAX_TASK_ATTEMPTS = 3;
+export const DEFAULT_MAX_REVIEW_ATTEMPTS = 2;
 
 // Journal settings. The journal is append-only in the hot path; rotation keeps
 // long-running missions from growing it without bound.
@@ -119,6 +121,14 @@ export const initialState = () => ({
   worker_timeout_ms: 1800000,
   needs_research: false,
   research: false,
+  never_give_up: false,
+  max_task_attempts: DEFAULT_MAX_TASK_ATTEMPTS,
+  max_review_attempts: DEFAULT_MAX_REVIEW_ATTEMPTS,
+  mutation_checks: false,
+  strict_checks: false,
+  model_rotation: [],
+  check_baseline: {},
+  cost_extra_usd: 0,
 });
 
 export function parseFrontmatter(text) {

@@ -28,6 +28,12 @@ export const planning = {
       `goal_audit: ${s.goal_audit ?? false}`,
       `max_goal_audits: ${s.max_goal_audits ?? 3}`,
       `autonomy: ${s.autonomy ?? "standard"}`,
+      `never_give_up: ${s.never_give_up === true}`,
+      `max_task_attempts: ${s.max_task_attempts ?? 3}`,
+      `max_review_attempts: ${s.max_review_attempts ?? 2}`,
+      `mutation_checks: ${s.mutation_checks === true}`,
+      `require_e2e: ${s.require_e2e === true}`,
+      `strict_checks: ${s.strict_checks === true}`,
       `lease_ms: ${s.lease_ms ?? 300000}`,
       `worker_timeout_ms: ${s.worker_timeout_ms ?? 1800000}`,
       `continuous_improvement: ${s.continuous_improvement ?? true}`,
@@ -81,6 +87,9 @@ export const planning = {
       finish_reason: null,
       task_reports: {},
       worker_sessions: [],
+      review_attempts: 0,
+      goal_audits: 0,
+      cost_extra_usd: 0,
     });
     await this.saveStateSafe(root, state);
   },
@@ -105,10 +114,17 @@ export const planning = {
     let generated;
     try {
       const model = await this.pickPlannerModel();
-      generated = await this.d.createPlan(clean, root, this.options.generate ?? (async () => ""), {
-        model,
-        attempts: 2,
-      });
+      const generate = this.options.generate ?? (async () => "");
+      generated = await this.d.createPlan(
+        clean,
+        root,
+        async (args) => {
+          const out = await generate(args);
+          this.noteGeneration(root, out);
+          return out;
+        },
+        { model, attempts: 2 }
+      );
     } catch (err) {
       // A planner/model failure must never leave a half-authored mission:
       // `.mission/` with only state.json renders as "(no objective)" and 0/0

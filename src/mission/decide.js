@@ -15,7 +15,34 @@ export function selectTask(tasks) {
   return ready ?? open[0];
 }
 
-export function applyTaskResults(tasks, results) {
+/// The baseline is captured on the first verification: a check that was green
+/// from the start cannot be credited as proof that a task was implemented.
+export function captureBaseline(results = [], existing = {}) {
+  const out = { ...(existing ?? {}) };
+  for (const result of results) {
+    if (result?.id && !Object.prototype.hasOwnProperty.call(out, result.id))
+      out[result.id] = Boolean(result.ok);
+  }
+  return out;
+}
+
+/// New checks added by a re-plan/goal audit start "red" so their tasks can be
+/// earned by real work instead of inheriting a green baseline.
+export function markBaselineRed(baseline = {}, ids = [], onlyNew = false) {
+  const out = { ...(baseline ?? {}) };
+  for (const id of ids) {
+    if (!id) continue;
+    if (onlyNew && Object.prototype.hasOwnProperty.call(out, id)) continue;
+    out[id] = false;
+  }
+  return out;
+}
+
+export function verifyingTransition(results = [], baseline = {}) {
+  return results.some((r) => r?.ok === true && baseline?.[r.id] === false);
+}
+
+export function applyTaskResults(tasks, results, baseline = null) {
   const out = tasks.map((t) => ({ ...t }));
   let changed = false;
   for (let pass = 0; pass < out.length + 1; pass += 1) {
@@ -25,6 +52,7 @@ export function applyTaskResults(tasks, results) {
       if (task.verify) {
         const result = results.find((r) => r.id === task.verify);
         if (!result || !result.ok) continue;
+        if (baseline && baseline[task.verify] === true) continue;
       }
       const blocked = (task.blocked_by ?? []).some((id) => {
         const b = out.find((x) => x.id === id);
@@ -68,6 +96,7 @@ export function decideNext({
   stopFile,
   pauseFile,
   criteria,
+  baseline = null,
   now = Date.now(),
 }) {
   if (stopFile) return { type: "stop", reason: "stop-file" };
@@ -91,7 +120,8 @@ export function decideNext({
   ) {
     return { type: "stop", reason: "budget" };
   }
-  if (state.turn >= state.max_turns) return { type: "stop", reason: "max-turns" };
+  if (state.max_turns > 0 && state.turn >= state.max_turns)
+    return { type: "stop", reason: "max-turns" };
   if (
     Number.isFinite(state.max_writes) &&
     state.max_writes > 0 &&
@@ -99,11 +129,21 @@ export function decideNext({
   ) {
     return { type: "stop", reason: "write-ceiling" };
   }
-  if (verdict?.status === "blocked")
+  if (verdict?.status === "blocked") {
+    if (state.never_give_up)
+      return { type: "replan", reason: "blocked", unblock: verdict.unblock ?? "" };
     return { type: "stop", reason: "blocked", unblock: verdict.unblock ?? "" };
+  }
   const green = results.length > 0 && results.every((r) => r.ok);
   const requirementsOk = requirementsMet(criteria, results);
-  if (green && requirementsOk && tasks.every((t) => t.status === TASK_STATUS.COMPLETED))
+  const hasVerifiedTasks = tasks.some((t) => Boolean(t.verify));
+  const verifiedWork = !baseline || !hasVerifiedTasks || verifyingTransition(results, baseline);
+  if (
+    green &&
+    requirementsOk &&
+    verifiedWork &&
+    tasks.every((t) => t.status === TASK_STATUS.COMPLETED)
+  )
     return { type: "complete" };
-  return { type: "continue", green, requirementsOk };
+  return { type: "continue", green, requirementsOk, verifiedWork };
 }

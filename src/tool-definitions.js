@@ -111,6 +111,24 @@ export function toolDefinitions(ctx, supervisor) {
       }),
     });
     editor.add({
+      name: "spawn",
+      description:
+        "Lead tool: create an independently verifiable task and dispatch a subagent for it. Files must be disjoint from active tasks; completion is always checked by the harness.",
+      input: obj(
+        {
+          subject: str,
+          files: { type: "array", items: str },
+          verify: str,
+          prompt: str,
+        },
+        ["subject"]
+      ),
+      options: { namespace: "mission", codemode: false },
+      execute: async (input, toolCtx) => ({
+        content: await supervisor.toolSpawn(toolCtx.sessionID, input),
+      }),
+    });
+    editor.add({
       name: "web_search",
       description:
         "Search the web. Returns titled results with URLs and snippets. Use citation URLs in reports.",

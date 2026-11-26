@@ -15,16 +15,31 @@ export const models = {
     }
   },
 
-  pickFreeModel(models, exclude) {
+  pickFreeModel(models, exclude, usedIDs = []) {
     const free = models.filter(
       (m) =>
         (m.cost?.[0]?.output ?? 0) === 0 &&
         m.capabilities?.tools !== false &&
-        !(m.id === exclude?.id && m.providerID === exclude?.providerID)
+        !(m.id === exclude?.id && m.providerID === exclude?.providerID) &&
+        !usedIDs.includes(`${m.providerID}/${m.id}`)
     );
     free.sort((a, b) => Number(b.providerID === "opencode") - Number(a.providerID === "opencode"));
     const chosen = free[0];
     return chosen ? { providerID: chosen.providerID, id: chosen.id } : undefined;
+  },
+
+  /// Ordered rotation list: current model first excluded, then each distinct
+  /// free tools-capable model, with previously tried models skipped.
+  modelRotationCandidates(catalog, current, used = []) {
+    const out = [];
+    const skip = [...used];
+    for (let i = 0; i < catalog.length + 1; i += 1) {
+      const candidate = this.pickFreeModel(catalog, current, skip);
+      if (!candidate) break;
+      out.push(candidate);
+      skip.push(`${candidate.providerID}/${candidate.id}`);
+    }
+    return out;
   },
 
   async pickPlannerModel() {

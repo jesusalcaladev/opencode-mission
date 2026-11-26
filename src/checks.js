@@ -6,6 +6,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { missionDir, FILES } from "./mission.js";
+import { safeCheckCmd } from "./planner/prompt.js";
 
 const MAX_OUTPUT = 64 * 1024;
 const SKIP = new Set([
@@ -107,7 +108,7 @@ export async function runChecks(root, criteria, options = {}) {
     return cache.results;
   }
 
-  const limit = Math.max(1, Math.min(8, options.maxParallel ?? 3));
+  const limit = Math.max(1, options.maxParallel ?? 3);
   const results = new Array(checks.length);
   let next = 0;
   async function worker() {
@@ -115,6 +116,18 @@ export async function runChecks(root, criteria, options = {}) {
       const index = next++;
       const check = checks[index];
       const started = Date.now();
+      if (options.strict === true && !safeCheckCmd(check?.cmd)) {
+        results[index] = {
+          id: String(check?.id ?? index),
+          ok: false,
+          exit: 127,
+          ms: 0,
+          summary: "refused: unsafe or vacuous check command (strict_checks)",
+          evidence: "",
+          refused: true,
+        };
+        continue;
+      }
       const attempts = Math.max(0, Math.min(2, Number(check.retries) || 0)) + 1;
       let run = null;
       let ok = false;

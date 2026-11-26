@@ -16,6 +16,12 @@ export const scheduler = {
     });
   },
 
+  activeWorkerCount(root) {
+    let count = 0;
+    for (const worker of this.workers.values()) if (worker.root === root) count += 1;
+    return count;
+  },
+
   taskIsActive(root, taskId) {
     for (const worker of this.workers.values()) {
       if (worker.root === root && worker.taskId === taskId) return true;
@@ -55,6 +61,32 @@ export const scheduler = {
       }
       const session = await this.ctx.session.get({ sessionID: w.id }).catch(() => null);
       if (session && (session.time?.idle ?? 0) > (session.time?.busy ?? 0)) {
+        const worker = this.workers.get(w.id);
+        const maxRevives = this.options.maxWorkerRevives ?? (state.never_give_up ? Infinity : 1);
+        const revives = worker?.revives ?? 0;
+        if (revives < maxRevives && lease && lease.lease_until > Date.now()) {
+          if (worker) worker.revives = revives + 1;
+          await this.ctx.session
+            .prompt({
+              sessionID: w.id,
+              text: `[MISSION WORKER] Your session went quiet but the lease for task #${w.task.id} is live. Continue the task and call mission_task_done.`,
+              delivery: "queue",
+            })
+            .catch(() => {});
+          await this.d.appendJournal(
+            root,
+            `worker ${w.id} quiet: re-admitted task #${w.task.id} (${revives + 1}/${maxRevives})`
+          );
+          const renewed = await this.d.loadProgress(root);
+          this.d.renew(
+            renewed,
+            w.task.id,
+            Date.now(),
+            Math.min(Number(state.lease_ms) || 600000, 60_000)
+          );
+          await this.saveProgressSafe(root, renewed);
+          continue;
+        }
         await this.finalizeWorker(w, leadID, root, state, workRoot);
         return;
       }

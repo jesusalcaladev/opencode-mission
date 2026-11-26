@@ -30,9 +30,13 @@ nudged back to work. A mission that is genuinely impossible declares `blocked` w
 | `progress.json`           | Task leases: `{id, subject, status, owner, attempts, lease_until, last_error, verify}`                                                                                    |
 | `evidence/<check-id>.txt` | stdout, stderr, exit code and timing of each check run                                                                                                                    |
 | `STOP`                    | Kill switch. Presence stops the mission at the next idle boundary                                                                                                         |
+| `PAUSE`                   | Pause at the next idle boundary; resume after removing it                                                                                                                 |
+| `WAKE`                    | External watchdog request. Only the live supervisor consumes it and prompts the lead                                                                                      |
 
 `expect` is `exit0` (default) or `contains:<text>` (requires exit 0 **and** the substring
-in stdout).
+in stdout). With `strict_checks: true` (default in relentless), unsafe or vacuous
+commands are refused **before execution** regardless of who authored the criteria;
+the check is recorded as failed with a `refused` flag and evidence.
 
 ## State machine
 
@@ -45,11 +49,16 @@ init -> running -> (running | complete | blocked | aborted)
 
 1. Load state, criteria, tasks.
 2. **Re-run every check itself** with a timeout; write evidence.
-3. Apply `verify` results to tasks (fixed point over `blocked_by` chains).
-4. Update turn, cost (from the session's assistant messages), strategy tier.
+3. Apply `verify` results to tasks (fixed point over `blocked_by` chains). A check
+   that was green in `state.check_baseline` cannot verify a task; checks added by a
+   re-plan start red. Optional mutation control re-runs a check after removing the
+   task's files to reject vacuous checks.
+4. Update turn, cost (summed across **all** mission sessions), strategy tier.
 5. Decide:
-   - `STOP` file / budget / turn ceiling / `blocked` verdict -> terminal status.
-   - all checks green **and** all tasks complete -> `complete`.
+   - `STOP` / `PAUSE` / hard budget / wall-clock deadline / `test-erosion` -> terminal.
+   - `blocked` verdict -> terminal in `standard`, forced re-plan in `never_give_up`.
+   - all checks green, requirements covered, all tasks complete **and** at least one
+     real red→green transition -> `complete`.
    - otherwise -> admit one bounded prompt with the failures and the next task.
 6. Append the journal line **before** prompting, so a crash never loses the reason.
 
@@ -163,6 +172,15 @@ mode. On a soft stop, the harness extends them automatically if verified progres
 happened recently. `hard_budget_usd`, `max_wallclock_min`, `STOP`, `PAUSE`,
 `blocked`, `hard-budget` and `test-erosion` are absolute. Campaign defaults are
 40 turns/window, 8h wall-clock, $25 hard cap and 50 extensions.
+
+In `autonomy: relentless` / `never_give_up: true`, **all soft ceilings are
+unlimited** (`0` = no limit): task attempts, review attempts, goal-audit rounds,
+extensions, failure count, turns, writes and improvement cycles. `blocked` forces
+a re-plan, `review-high` forces rework, `goal-gaps` keeps looping, failed tasks are
+re-queued, and supervisor errors recover instead of aborting. `hard_budget_usd`,
+`max_wallclock_min`, `STOP`, `PAUSE` and `test-erosion` remain absolute and are
+the only normal ways the run ends; `mission_verdict("blocked")` no longer stops
+the mission.
 
 ## Research mode
 

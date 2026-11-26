@@ -48,6 +48,16 @@ export function rankFindings(findings, minImpact = DEFAULT_MIN_IMPACT) {
     });
 }
 
+/// Hard budget is absolute; a soft budget is a window while auto-extend is on.
+export function budgetExhausted(state = {}) {
+  const cost = Number(state.cost_usd) || 0;
+  const hard = Number(state.hard_budget_usd) || 0;
+  if (hard > 0 && cost >= hard) return true;
+  if (state.auto_extend === true || state.never_give_up === true) return false;
+  const soft = Number(state.budget_usd) || 0;
+  return soft > 0 && cost >= soft;
+}
+
 export function cycleDecision({
   finding,
   improveCycles = 0,
@@ -59,7 +69,8 @@ export function cycleDecision({
 }) {
   if (stopFile) return { type: "stop", reason: "stop-file" };
   if (outOfBudget) return { type: "stop", reason: "budget" };
-  if (improveCycles >= maxCycles) return { type: "stop", reason: "improve-cycle-limit" };
+  if (maxCycles > 0 && improveCycles >= maxCycles)
+    return { type: "stop", reason: "improve-cycle-limit" };
   if (cleanRounds >= maxCleanRounds) return { type: "stop", reason: "no-high-value-improvements" };
   if (finding) return { type: "implement", finding };
   return { type: "audit" };

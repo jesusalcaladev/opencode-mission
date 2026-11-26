@@ -3,6 +3,8 @@
 // the next item and starts it with the previous mission's distilled memory.
 // No IO, no model, no OpenCode here.
 
+import { effortLimit } from "./autonomy.js";
+
 export const DEFAULT_MAX_EXTENSIONS = 3;
 export const EXTEND_TURNS = 8;
 export const EXTEND_MINUTES = 30;
@@ -59,7 +61,10 @@ export function chainDecision({
 }) {
   if (decision?.type !== "stop") return { type: "work" };
   if (!EXTENDABLE_REASONS.has(decision.reason)) return { type: "stop", reason: decision.reason };
-  if (extendRequested && extensions < maxExtensions) {
+  if (
+    extendRequested &&
+    (effortLimit(maxExtensions, DEFAULT_MAX_EXTENSIONS) === 0 || extensions < maxExtensions)
+  ) {
     return { type: "extend", reason: decision.reason };
   }
   if (next && decision.reason === "budget") {
@@ -104,7 +109,8 @@ export function autoExtendDecision({ decision, state = {}, progress = false, now
   if (NEVER_EXTEND.has(reason)) return { type: "stop", reason };
   if (!EXTENDABLE_REASONS.has(reason)) return { type: "stop", reason };
   if (state.auto_extend !== true) return { type: "stop", reason };
-  if ((state.extensions ?? 0) >= (state.max_extensions ?? DEFAULT_MAX_EXTENSIONS)) {
+  const maxExtensions = effortLimit(state.max_extensions, DEFAULT_MAX_EXTENSIONS);
+  if (maxExtensions > 0 && (state.extensions ?? 0) >= maxExtensions) {
     return { type: "stop", reason: "extension-limit" };
   }
   const hardBudget = Number(state.hard_budget_usd) || 0;

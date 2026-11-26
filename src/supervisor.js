@@ -17,6 +17,13 @@ import { workers } from "./supervisor/workers.js";
 import { scheduler } from "./supervisor/scheduler.js";
 import { tools } from "./supervisor/tools.js";
 import { researchTools } from "./supervisor/research-tools.js";
+import { cost } from "./supervisor/cost.js";
+import { quality } from "./supervisor/quality.js";
+import { spawnTools } from "./supervisor/spawn-tools.js";
+import { wake } from "./supervisor/wake.js";
+import { failures } from "./supervisor/failures.js";
+import { verification } from "./supervisor/verification.js";
+import { reviews } from "./supervisor/reviews.js";
 
 export class Supervisor {
   constructor(ctx, options = {}) {
@@ -35,8 +42,10 @@ export class Supervisor {
     this.timers = new Set();
     this.pendingTicks = new Set();
     this.rescueTimer = null;
+    this.generationCosts = new Map();
+    this.fileLocks = new Map();
     this.controller = new AbortController();
-    this.maxWorkers = Math.min(8, Math.max(1, Number(options.maxWorkers) || 3));
+    this.maxWorkers = Math.max(1, Number(options.maxWorkers) || 3);
     this.missionsRoot = options.missionsRoot ? this.d.path.resolve(options.missionsRoot) : null;
     this.enableWorkers = options.enableWorkers !== false;
     this.enableChaining = options.enableChaining !== false;
@@ -83,11 +92,14 @@ export class Supervisor {
           await this.saveProgressSafe(root, progress);
         }
       }
-      await this.reclaimExpiredLeases(root, progress);
+      await this.reclaimExpiredLeases(root, progress, state);
 
-      let { results, tasks } = await this.verify(root, workRoot);
+      await this.updateMissionCost(root, state, sessionID);
+      let { results, tasks, baseline } = await this.verify(root, workRoot);
+      state.check_baseline = baseline;
       if (await this.maybeSplitStuckTask(root, state, tasks)) {
-        ({ results, tasks } = await this.verify(root, workRoot));
+        ({ results, tasks, baseline } = await this.verify(root, workRoot));
+        state.check_baseline = baseline;
       }
       const criteria = await this.d.loadCriteria(root);
       state.last_checks_at = Date.now();
@@ -98,15 +110,22 @@ export class Supervisor {
       await this.revertBrokenImprovement(root, workRoot, state, results);
 
       let anyProgress = this.recordTurn(state, results, tasks);
-      const cost = await this.sessionCost(sessionID);
-      if (cost !== null) state.cost_usd = cost;
       const verdict = state.last_verdict;
       state.last_verdict = null;
       const stopFile = await this.d.stopRequested(root);
       let decision = await this.resolveStopDecision(
         root,
         state,
-        this.d.decideNext({ state, results, tasks, verdict, stopFile, pauseFile: false, criteria })
+        this.d.decideNext({
+          state,
+          results,
+          tasks,
+          verdict,
+          stopFile,
+          pauseFile: false,
+          criteria,
+          baseline: state.check_baseline ?? {},
+        })
       );
 
       await this.journalTurn(root, state, results, tasks, decision);
@@ -119,11 +138,18 @@ export class Supervisor {
         );
       });
 
-      if (decision.type === "continue") {
-        const replanned = await this.maybeReplan(root, state, results, tasks);
+      if (decision.type === "continue" || decision.type === "replan") {
+        const replanned = await this.maybeReplan(
+          root,
+          state,
+          results,
+          tasks,
+          decision.type === "replan"
+        );
         if (replanned) {
           state.metrics = this.d.recordMetric(state.metrics, "replans", 1);
-          ({ results, tasks } = await this.verify(root, workRoot));
+          ({ results, tasks, baseline } = await this.verify(root, workRoot));
+          state.check_baseline = baseline;
           decision = this.d.decideNext({
             state,
             results,
@@ -132,10 +158,14 @@ export class Supervisor {
             stopFile: await this.d.stopRequested(root),
             pauseFile: await this.d.pauseRequested(root),
             criteria: await this.d.loadCriteria(root),
+            baseline: state.check_baseline ?? {},
           });
           await this.journalTurn(root, state, results, tasks, decision, "after replan");
         }
       }
+      // A forced re-plan from a blocked verdict is a retry instruction, not a
+      // terminal state: keep the turn alive even when no new plan was produced.
+      if (decision.type === "replan") decision = { type: "continue", reason: decision.reason };
 
       decision = await this.runRolePipeline(sessionID, root, state, tasks, results, decision);
 
@@ -143,7 +173,8 @@ export class Supervisor {
         const outcome = await this.runWorkers(sessionID, root, state, tasks, workRoot);
         if (outcome.ran) {
           state = await this.d.loadState(root);
-          ({ results, tasks } = await this.verify(root, workRoot));
+          ({ results, tasks, baseline } = await this.verify(root, workRoot));
+          state.check_baseline = baseline;
           anyProgress = this.recordTurn(state, results, tasks, false) || anyProgress;
           decision = this.d.decideNext({
             state,
@@ -153,6 +184,7 @@ export class Supervisor {
             stopFile: await this.d.stopRequested(root),
             pauseFile: await this.d.pauseRequested(root),
             criteria: await this.d.loadCriteria(root),
+            baseline: state.check_baseline ?? {},
           });
           await this.journalTurn(root, state, results, tasks, decision, "after workers");
         }
@@ -202,25 +234,7 @@ export class Supervisor {
       const nudge = this.buildNudge({ sessionID, targetSession, state, results, tasks });
       if (!(await this.deliverNudge(root, sessionID, targetSession, state, nudge))) return;
     } catch (err) {
-      const errorRoot = this.rootFor(sessionID);
-      if (!errorRoot) return;
-      try {
-        const current = await this.d.loadState(errorRoot);
-        if (current.status !== this.d.STATUS.RUNNING) return;
-        current.status = this.d.STATUS.ABORTED;
-        current.finish_reason = `supervisor error: ${this.d.shortError(err)}`;
-        current.finished_at = new Date().toISOString();
-        await this.saveStateSafe(errorRoot, current);
-        await this.journal(errorRoot, `supervisor error: ${this.d.shortError(err)}`).catch(
-          () => {}
-        );
-      } catch (inner) {
-        // Keep the original failure visible even when the state file is unwritable.
-        await this.journal(
-          errorRoot,
-          `supervisor error: ${this.d.shortError(err)} (recovery failed: ${this.d.shortError(inner)})`
-        ).catch(() => {});
-      }
+      await this.recoverFromError(sessionID, err);
     } finally {
       this.busy.delete(sessionID);
     }
@@ -242,5 +256,12 @@ Object.assign(
   workers,
   scheduler,
   tools,
-  researchTools
+  researchTools,
+  cost,
+  quality,
+  spawnTools,
+  wake,
+  failures,
+  verification,
+  reviews
 );

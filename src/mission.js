@@ -23,6 +23,9 @@ import {
 import {
   selectTask,
   applyTaskResults,
+  captureBaseline,
+  markBaselineRed,
+  verifyingTransition,
   nextStrategy,
   decideNext,
   requirementsMet,
@@ -31,6 +34,7 @@ import {
 import {
   appendHistory,
   recentProgress,
+  effortLimit,
   campaignSettings,
   HISTORY_LIMIT,
 } from "./mission/autonomy.js";
@@ -63,7 +67,13 @@ import {
   parseGaps,
   MAX_REVIEW_ATTEMPTS,
 } from "./mission/roles.js";
-import { parseFindings, rankFindings, cycleDecision, worthImproving } from "./mission/improve.js";
+import {
+  parseFindings,
+  rankFindings,
+  cycleDecision,
+  worthImproving,
+  budgetExhausted,
+} from "./mission/improve.js";
 import { loadProjectInstructions, MAX_INSTRUCTION_CHARS } from "./mission/instructions.js";
 import { upsertFact, renderFacts, MAX_FACTS } from "./mission/facts.js";
 import {
@@ -82,6 +92,16 @@ import {
   CAMPAIGN_EXTEND_TURNS,
   CAMPAIGN_EXTEND_WRITES,
 } from "./mission/chain.js";
+import { mutationSettings, mutationDecision } from "./mission/quality.js";
+import { normalizeLockPath, lockFiles, unlockFiles, lockedBy } from "./mission/locks.js";
+import { WAKE_FILE, WAKE_AGE_MS, needsWake } from "./mission/wake.js";
+import {
+  costFromContext,
+  mergeCosts,
+  applyCost,
+  generationCost,
+  sessionIDsForMission,
+} from "./mission/cost.js";
 import {
   migrateV1,
   fromTasks,
@@ -93,6 +113,7 @@ import {
   expired,
   isLeased,
   retryable,
+  attemptLimit,
   LEASE_MS,
   MAX_ATTEMPTS,
 } from "./mission/lease.js";
@@ -116,12 +137,16 @@ export {
   objectiveOf,
   selectTask,
   applyTaskResults,
+  captureBaseline,
+  markBaselineRed,
+  verifyingTransition,
   nextStrategy,
   decideNext,
   requirementsMet,
   allGreen,
   appendHistory,
   recentProgress,
+  effortLimit,
   campaignSettings,
   HISTORY_LIMIT,
   promptKey,
@@ -156,6 +181,7 @@ export {
   rankFindings,
   cycleDecision,
   worthImproving,
+  budgetExhausted,
   loadProjectInstructions,
   MAX_INSTRUCTION_CHARS,
   upsertFact,
@@ -185,8 +211,23 @@ export {
   expired,
   isLeased,
   retryable,
+  attemptLimit,
   LEASE_MS,
   MAX_ATTEMPTS,
+  costFromContext,
+  mergeCosts,
+  applyCost,
+  generationCost,
+  sessionIDsForMission,
+  mutationSettings,
+  mutationDecision,
+  normalizeLockPath,
+  lockFiles,
+  unlockFiles,
+  lockedBy,
+  WAKE_FILE,
+  WAKE_AGE_MS,
+  needsWake,
 };
 
 export * from "./mission/persistence.js";

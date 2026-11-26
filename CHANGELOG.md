@@ -6,7 +6,26 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `autonomy: relentless` / `never_give_up: true`: unlimited soft effort ceilings.
+  `blocked` forces a re-plan, high review findings force rework, goal gaps loop,
+  failed tasks retry forever, and supervisor errors recover. Hard budget,
+  wall-clock deadline, `STOP`, `PAUSE` and `test-erosion` stay absolute.
+- Verified work: `state.check_baseline` prevents an already-green check from
+  completing a task; new checks start red; optional mutation control rejects
+  vacuous checks; two reviewers use distinct models when available.
+- Dynamic parallelism: no 8-worker cap, capacity recomputed per wave, per-file
+  locks, quiet-worker re-admission, and a lead-only `mission_spawn` tool.
+- External watchdog (`npm run watchdog`) writes `.mission/WAKE`; the internal
+  watcher consumes it after host restarts.
+- Cost is aggregated across lead, workers, roles and direct model calls; it never
+  decreases.
+
 ### Fixed
+
+- Journal archives are pruned by modification time instead of filename, so a
+  random suffix can no longer cause the newest lines to be deleted under load.
 
 - `/mission-start <objective>` now accepts the objective inline. The TUI slash
   command was registered without `slash.arguments`, so OpenCode discarded the

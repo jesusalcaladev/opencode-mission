@@ -20,9 +20,12 @@ out of the model and into the harness:
 The result is a long-running loop that survives failed requests, service restarts and
 context compaction, with parallel workers, git checkpoints and hard budgets.
 
-Version 0.3.0 adds **Mission Control** (a full TUI dashboard + live HUD),
-**Campaign Mode** (auto-extending, requirement-gated runs that survive for hours)
-and **Research Mode** (web search, safe fetch, images and image generation).
+Version 0.4.0 adds **Relentless Mode** (blocked → re-plan, review → rework,
+failed tasks → unlimited retries, only hard caps/STOP can end the run),
+**verified work** (baseline red→green + optional mutation control), dynamic
+parallelism with per-file locks and `mission_spawn`, and an **external watchdog**
+that can revive a quiet mission after a host restart. 0.3.0 added Mission
+Control, Campaign Mode and Research Mode.
 
 Earlier versions added **durable distilled memory** (decisions survive hundreds of
 turns) and **task leases** (a dead worker's task is reclaimed instead of stuck forever).
@@ -50,11 +53,28 @@ turns) and **task leases** (a dead worker's task is reclaimed instead of stuck f
 - **Campaign Mode** — plans up to 60 tasks / 24 checks / explicit requirements,
   auto-extends budgets while verified progress continues, audits the actual goal
   before completion, and stops only at hard wall-clock/cost caps or `STOP`.
+- **Relentless Mode** — `autonomy: relentless` (or `never_give_up: true`) turns
+  every soft ceiling into unlimited effort: `blocked` forces a re-plan, high
+  review findings force rework, goal gaps loop, failed tasks are re-queued, and
+  supervisor errors recover. `STOP`, `PAUSE`, `hard_budget_usd`,
+  `max_wallclock_min` and `test-erosion` remain absolute.
+- **Verified work, not just green checks** — a check that was already green at
+  baseline cannot complete a task; new checks start red; relentless missions
+  optionally re-run each check after deleting the task's files to reject vacuous
+  checks; two reviewers use distinct models when the catalog allows.
+- **Dynamic parallelism** — `maxWorkers` is no longer capped at 8, capacity is
+  recomputed per wave, per-file locks prevent overlapping writes, quiet workers
+  are re-admitted before their lease is lost, and the lead can call
+  `mission_spawn` to create a new verifiable task plus subagent on demand.
 - **Research Mode** — `/mission research <question>` searches the web (OpenCode's
   websearch provider plus DuckDuckGo/Brave), fetches pages safely, finds and
   downloads images with attribution, and can generate images when a model exists.
 - **Durable state** — `state.json`, `journal.md`, `evidence/` and a session→mission
   registry survive restarts; `/mission resume` and auto-resume pick up where it left off.
+  Cost is aggregated across the lead, every worker/role session and direct model calls.
+- **External watchdog** — `npm run watchdog` writes `.mission/WAKE` for quiet
+  running missions; the in-process watcher consumes it and re-admits the lead.
+  Safe to run from cron/systemd.
 - **Context handoff** — rotate to a fresh session on a schedule; the journal is the memory.
 - **Integrity guard** — editing or deleting an existing test aborts with `test-erosion`;
   `mission_write` refuses any path under `.mission/`, so the model cannot rewrite the
@@ -174,20 +194,21 @@ TUI commands (also in the command palette): `/mission-dashboard`,
 alone still opens the "New mission" prompt. `/missionstart` and `/mission-new`
 are aliases.
 
-| Tool                                              | Purpose                                                |
-| ------------------------------------------------- | ------------------------------------------------------ |
-| `mission_status`                                  | Read mission state                                     |
-| `mission_write`                                   | Atomically write a file inside the workspace           |
-| `mission_check`                                   | Run the real criteria and return evidence paths        |
-| `mission_verdict`                                 | Declare `met` / `blocked` (harness still verifies)     |
-| `mission_task_done`                               | Worker completion report (harness still verifies)      |
-| `mission_heartbeat`                               | Renew the worker's task lease while working            |
-| `mission_report`                                  | Store read-only stage findings (investigator/reviewer) |
-| `mission_fact`                                    | Store a durable fact that survives compaction          |
-| `mission_log`                                     | Append to the durable journal                          |
-| `mission_web_search` / `mission_web_fetch`        | Search the web / fetch a page safely                   |
-| `mission_image_search` / `mission_image_generate` | Find or generate images with attribution               |
-| `mission_research` / `mission_research_note`      | Orchestrate research and save artifacts                |
+| Tool                                              | Purpose                                                   |
+| ------------------------------------------------- | --------------------------------------------------------- |
+| `mission_status`                                  | Read mission state                                        |
+| `mission_write`                                   | Atomically write a file inside the workspace              |
+| `mission_check`                                   | Run the real criteria and return evidence paths           |
+| `mission_verdict`                                 | Declare `met` / `blocked` (harness still verifies)        |
+| `mission_task_done`                               | Worker completion report (harness still verifies)         |
+| `mission_heartbeat`                               | Renew the worker's task lease while working               |
+| `mission_spawn`                                   | Lead tool: create a verifiable task + dispatch a subagent |
+| `mission_report`                                  | Store read-only stage findings (investigator/reviewer)    |
+| `mission_fact`                                    | Store a durable fact that survives compaction             |
+| `mission_log`                                     | Append to the durable journal                             |
+| `mission_web_search` / `mission_web_fetch`        | Search the web / fetch a page safely                      |
+| `mission_image_search` / `mission_image_generate` | Find or generate images with attribution                  |
+| `mission_research` / `mission_research_note`      | Orchestrate research and save artifacts                   |
 
 ## Configuration
 
@@ -201,7 +222,9 @@ are aliases.
 | `fastModel`           | auto             | Model for read-only roles (investigator/reviewer)       |
 | `modelsByRole`        | unset            | Per-role model map, e.g. `{ "reviewer": {...} }`        |
 | `missionsRoot`        | `<cwd>/missions` | Where generated mission workspaces live                 |
-| `maxWorkers`          | `3`              | Maximum parallel sub-agents per wave                    |
+| `maxWorkers`          | `3`              | Max parallel sub-agents per wave (no hard cap)          |
+| `wakeIntervalMs`      | `15000`          | How often the internal WAKE watcher scans               |
+| `maxWorkerRevives`    | `1` / `∞`        | Quiet-worker re-admits (unlimited in relentless)        |
 | `imageModel`          | auto             | `{providerID, id}` used by `mission_image_generate`     |
 | `workerTimeoutMs`     | `600000`         | Max wait for a read-only role agent                     |
 | `enableWorkers`       | `true`           | Set to `false` for single-agent runs                    |
@@ -210,30 +233,36 @@ are aliases.
 
 ### Mission frontmatter (`.mission/mission.md`)
 
-| Key                      | Default    | Meaning                                                |
-| ------------------------ | ---------- | ------------------------------------------------------ |
-| `max_turns`              | `16`       | Turn ceiling                                           |
-| `budget_usd`             | `5`        | Cost ceiling (when the provider reports cost)          |
-| `max_wallclock_min`      | `0`        | Wall-clock ceiling (0 = off)                           |
-| `lease_ms`               | `300000`   | Worker lease duration; renew with `mission_heartbeat`  |
-| `max_extensions`         | `3`        | How many times the `EXTEND` file may raise the budgets |
-| `continuous_improvement` | `true`     | Audit/improve after the objective is met               |
-| `max_improve_cycles`     | `5`        | Bounded improvement cycles                             |
-| `min_impact`             | `medium`   | Minimum finding impact worth implementing              |
-| `max_writes`             | `0`        | Successful file writes before aborting (0 = off)       |
-| `max_failures`           | `3`        | Failed turns before aborting                           |
-| `handoff_every_turns`    | `4`        | Rotate to a fresh session (0 = off)                    |
-| `isolation`              | `none`     | `worktree` runs in a sibling git worktree              |
-| `stall_after_turns`      | `2`        | Strategy-escalation threshold                          |
-| `autonomy`               | `standard` | `campaign` enables long-horizon defaults               |
-| `auto_extend`            | `false`    | Extend soft budgets while progress is verified         |
-| `hard_budget_usd`        | `0`        | Absolute cost cap that extensions never cross          |
-| `extension_turns`        | `8`        | Turns granted per extension                            |
-| `extension_writes`       | `50`       | Writes granted per extension                           |
-| `goal_audit`             | `false`    | Audit objective coverage before completion             |
-| `max_goal_audits`        | `3`        | Rounds of goal-gap repair                              |
-| `worker_timeout_ms`      | `1800000`  | Max lifetime of a worker without heartbeat             |
-| `needs_research`         | `false`    | Dispatch a researcher alongside the investigator       |
+| Key                      | Default    | Meaning                                                                             |
+| ------------------------ | ---------- | ----------------------------------------------------------------------------------- |
+| `max_turns`              | `16`       | Turn ceiling                                                                        |
+| `budget_usd`             | `5`        | Cost ceiling (when the provider reports cost)                                       |
+| `max_wallclock_min`      | `0`        | Wall-clock ceiling (0 = off)                                                        |
+| `lease_ms`               | `300000`   | Worker lease duration; renew with `mission_heartbeat`                               |
+| `max_extensions`         | `3`        | How many times the `EXTEND` file may raise the budgets                              |
+| `continuous_improvement` | `true`     | Audit/improve after the objective is met                                            |
+| `max_improve_cycles`     | `5`        | Bounded improvement cycles                                                          |
+| `min_impact`             | `medium`   | Minimum finding impact worth implementing                                           |
+| `max_writes`             | `0`        | Successful file writes before aborting (0 = off)                                    |
+| `max_failures`           | `3`        | Failed turns before aborting                                                        |
+| `handoff_every_turns`    | `4`        | Rotate to a fresh session (0 = off)                                                 |
+| `isolation`              | `none`     | `worktree` runs in a sibling git worktree                                           |
+| `stall_after_turns`      | `2`        | Strategy-escalation threshold                                                       |
+| `autonomy`               | `standard` | `standard`, `campaign` or `relentless`                                              |
+| `never_give_up`          | `false`    | Unlimited soft effort ceilings; hard caps still apply                               |
+| `max_task_attempts`      | `3`        | Per-task retries (`0` = unlimited)                                                  |
+| `max_review_attempts`    | `2`        | Review rework rounds (`0` = unlimited)                                              |
+| `mutation_checks`        | `false`    | Reject checks that stay green without the owned files                               |
+| `require_e2e`            | `false`    | Require an e2e/smoke check (default in relentless)                                  |
+| `strict_checks`          | `false`    | Refuse unsafe/vacuous criteria commands from **any** source (default in relentless) |
+| `auto_extend`            | `false`    | Extend soft budgets while progress is verified                                      |
+| `hard_budget_usd`        | `0`        | Absolute cost cap that extensions never cross                                       |
+| `extension_turns`        | `8`        | Turns granted per extension                                                         |
+| `extension_writes`       | `50`       | Writes granted per extension                                                        |
+| `goal_audit`             | `false`    | Audit objective coverage before completion                                          |
+| `max_goal_audits`        | `3`        | Rounds of goal-gap repair                                                           |
+| `worker_timeout_ms`      | `1800000`  | Max lifetime of a worker without heartbeat                                          |
+| `needs_research`         | `false`    | Dispatch a researcher alongside the investigator                                    |
 
 ## Mission files
 
@@ -253,6 +282,7 @@ are aliases.
   evidence/*.txt    stdout, stderr, exit code and timing per check
   PAUSE             pause at the next idle boundary (remove + resume to continue)
   STOP              kill switch, checked at every idle boundary
+  WAKE              external watchdog request; consumed by the live supervisor
   research/         reports, sources.json, pages/ and images/ (Research Mode)
 ```
 
@@ -290,9 +320,12 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) before sending changes.
 
 ## Known limitations
 
-- One mission runs in one lead session at a time; there is no multi-mission scheduler.
-- Cost is read from assistant messages, so unpriced models report $0. The turn and
-  wall-clock ceilings are the reliable backstops.
+- One mission runs in one lead session at a time; there is no parallel multi-mission scheduler.
+- Cost is aggregated across all mission sessions, but unpriced models still report $0.
+  The turn/wall-clock ceilings and `hard_budget_usd` remain the reliable backstops.
+- `relentless` removes soft ceilings, not hard ones. No harness can guarantee 100%
+  correctness for an objective that cannot be expressed as real executable checks;
+  baseline and mutation controls reduce, but do not eliminate, false positives.
 - Model rotation is best-effort: if no free tools-capable model is available, the
   mission retries until `max_failures`.
 - Criteria commands run in a shell inside the workspace. Only use criteria you trust.

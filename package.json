@@ -65,6 +65,7 @@
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "coverage": "node --test --experimental-test-coverage --test-coverage-lines=85 --test-coverage-branches=65 --test-coverage-functions=80 test/*.test.js",
+    "watchdog": "node scripts/mission-watchdog.mjs --once",
     "quality": "npm run check && npm run lint && npm run format:check && npm run typecheck && npm run coverage"
   }
 }

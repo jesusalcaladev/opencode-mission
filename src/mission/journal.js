@@ -50,10 +50,19 @@ function journalRotationBytes() {
 async function pruneJournalArchives(file, keep) {
   const dir = path.dirname(file);
   const prefix = `${path.basename(file, ".md")}.`;
-  const archives = (await readdir(dir).catch(() => []))
-    .filter((name) => name.startsWith(prefix) && name.endsWith(".md"))
-    .sort();
-  for (const name of archives.slice(0, Math.max(0, archives.length - keep))) {
+  const names = (await readdir(dir).catch(() => [])).filter(
+    (name) => name.startsWith(prefix) && name.endsWith(".md")
+  );
+  // Archive names carry a random suffix, so lexical order is not creation
+  // order. Prune by mtime to guarantee the newest lines survive.
+  const archives = await Promise.all(
+    names.map(async (name) => ({
+      name,
+      mtime: (await stat(path.join(dir, name)).catch(() => null))?.mtimeMs ?? 0,
+    }))
+  );
+  archives.sort((a, b) => a.mtime - b.mtime || a.name.localeCompare(b.name));
+  for (const { name } of archives.slice(0, Math.max(0, archives.length - keep))) {
     await rm(path.join(dir, name), { force: true }).catch(() => {});
   }
 }

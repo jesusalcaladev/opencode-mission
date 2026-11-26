@@ -44,6 +44,57 @@ harness keeps working across many budget windows:
 Monitor it from the TUI with `ctrl+shift+m` (dashboard) or from disk with
 `state.json` (look at `history`, `agent_runs`, `goal_audits`, `extensions`).
 
+## Relentless missions (no soft stopping point)
+
+Set `autonomy: relentless` (or `never_give_up: true`) in `.mission/mission.md`:
+
+```yaml
+autonomy: relentless
+max_turns: 0 # 0 = unlimited
+max_failures: 0
+max_writes: 0
+max_extensions: 0
+max_task_attempts: 0
+max_review_attempts: 0
+max_goal_audits: 0
+auto_extend: true
+mutation_checks: true
+require_e2e: true
+strict_checks: true # refuses sudo/rm -rf/vacuous commands even in pre-authored criteria
+hard_budget_usd: 25 # absolute
+max_wallclock_min: 480 # absolute (8h)
+```
+
+What changes: `blocked` forces a re-plan, high review findings force rework,
+goal gaps loop, failed tasks are retried forever, supervisor errors recover, and
+soft budgets auto-extend without a ceiling. The harness still requires red→green
+checks, requirement coverage and clean reviews. `STOP`, `PAUSE`,
+`hard_budget_usd`, `max_wallclock_min` and `test-erosion` are **not** extensible.
+
+Monitor `state.metrics` (`failuresReset`, `extensions`, `replans`, `improvements`)
+and the journal tail. The `notifyUrl` webhook receives `blocked-replan`,
+`review-rework`, `goal-gaps`, `failure-reset`, `budget-extension` and
+`supervisor-recovery` events.
+
+## External watchdog (survive a host restart)
+
+The in-process rescue timer cannot fire while OpenCode is down. A tiny helper
+only writes `.mission/WAKE`; the live supervisor consumes it and re-admits the lead:
+
+```sh
+npm run watchdog -- --once --age-ms 180000 ~/missions
+```
+
+For a resident helper: `node scripts/mission-watchdog.mjs --interval-ms 60000 ~/missions`.
+Example cron (every minute):
+
+```cron
+* * * * * cd /path/to/opencode-mission && npm run watchdog -- --once ~/missions >> /tmp/mission-watchdog.log 2>&1
+```
+
+The watchdog skips missions with `STOP` or `PAUSE`, never prompts a session
+itself, and never writes state, criteria or tasks.
+
 ## Research missions
 
 ```text

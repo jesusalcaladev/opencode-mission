@@ -45,10 +45,23 @@ export function isLeased(progress, id, now = Date.now()) {
   return Boolean(p && p.status === TASK_STATUS.IN_PROGRESS && p.lease_until > now);
 }
 
-export function claim(progress, id, owner, now = Date.now(), ttl = LEASE_MS) {
+/// 0 means unlimited (relentless mode); older states default to MAX_ATTEMPTS.
+export function attemptLimit(state) {
+  const value = Number(state?.max_task_attempts);
+  return Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : MAX_ATTEMPTS;
+}
+
+export function claim(
+  progress,
+  id,
+  owner,
+  now = Date.now(),
+  ttl = LEASE_MS,
+  maxAttempts = MAX_ATTEMPTS
+) {
   const p = progress.find((x) => x.id === id);
   if (!p || p.status === TASK_STATUS.COMPLETED) return false;
-  if (p.attempts >= MAX_ATTEMPTS) return false;
+  if (maxAttempts > 0 && p.attempts >= maxAttempts) return false;
   if (isLeased(progress, id, now)) return false;
   p.status = TASK_STATUS.IN_PROGRESS;
   p.owner = owner;
@@ -74,12 +87,13 @@ export function release(progress, id, status = TASK_STATUS.COMPLETED) {
   return true;
 }
 
-export function fail(progress, id, error, now = Date.now()) {
+export function fail(progress, id, error, now = Date.now(), maxAttempts = MAX_ATTEMPTS) {
   const p = progress.find((x) => x.id === id);
   if (!p) return false;
   p.attempts += 1;
   p.last_error = String(error ?? "worker failed").slice(0, 300);
-  p.status = p.attempts >= MAX_ATTEMPTS ? TASK_STATUS.FAILED : TASK_STATUS.PENDING;
+  p.status =
+    maxAttempts > 0 && p.attempts >= maxAttempts ? TASK_STATUS.FAILED : TASK_STATUS.PENDING;
   p.owner = null;
   p.lease_until = 0;
   return true;
@@ -93,7 +107,9 @@ export function expired(progress, now = Date.now()) {
     .map((p) => p.id);
 }
 
-export function retryable(progress, id) {
+export function retryable(progress, id, maxAttempts = MAX_ATTEMPTS) {
   const p = progress.find((x) => x.id === id);
-  return Boolean(p && p.status !== TASK_STATUS.COMPLETED && p.attempts < MAX_ATTEMPTS);
+  return Boolean(
+    p && p.status !== TASK_STATUS.COMPLETED && (maxAttempts === 0 || p.attempts < maxAttempts)
+  );
 }

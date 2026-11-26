@@ -19,6 +19,9 @@ export const tools = {
     const normalized = rel.replace(/\\/g, "/").replace(/^\.\//, "");
     const worker = this.workers.get(sessionID);
     if (worker?.taskId) {
+      const owner = this.d.lockedBy(this.fileLocks, normalized);
+      if (owner !== null && owner !== worker.taskId)
+        return `Refusing to write ${normalized}: file is locked by task #${owner}.`;
       const assigned =
         (await this.d.loadTasks(root)).find((t) => t.id === worker.taskId)?.files ?? [];
       if (
@@ -54,7 +57,9 @@ export const tools = {
     const state = await this.d.loadState(root);
     const workRoot = this.effectiveRoot(root, state);
     const criteria = await this.d.loadCriteria(root);
-    const results = await this.d.runChecks(workRoot, criteria);
+    const results = await this.d.runChecks(workRoot, criteria, {
+      strict: state.strict_checks === true,
+    });
     if (!this.workers.has(sessionID)) {
       state.last_checks = results;
       await this.saveStateSafe(root, state);
@@ -149,9 +154,15 @@ export const tools = {
       const credible = status !== "done" || !task?.verify || Boolean(check?.ok);
       if (credible) {
         if (status === "done") this.d.release(progress, id, this.d.TASK_STATUS.COMPLETED);
-        else this.d.fail(progress, id, summary, Date.now());
+        else this.d.fail(progress, id, summary, Date.now(), this.taskAttemptLimit(state));
       } else {
-        this.d.fail(progress, id, `verify check ${task.verify} is red`, Date.now());
+        this.d.fail(
+          progress,
+          id,
+          `verify check ${task.verify} is red`,
+          Date.now(),
+          this.taskAttemptLimit(state)
+        );
       }
       await Promise.all([this.saveStateSafe(root, state), this.saveProgressSafe(root, progress)]);
       await this.d.appendJournal(

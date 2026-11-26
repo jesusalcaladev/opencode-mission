@@ -1,5 +1,6 @@
 // Plan validation and monotonic re-plan rules.
 import { SAFE_ID, DENY_CMD, VACUOUS_CMD } from "./prompt.js";
+import { normalizeSettings } from "./settings.js";
 
 function parseJson(text) {
   const raw = String(text ?? "").trim();
@@ -123,31 +124,14 @@ export function normalizePlan(raw, objective, workspace) {
     remaining.splice(remaining.indexOf(ready), 1);
   }
 
-  const s = data.settings && typeof data.settings === "object" ? data.settings : {};
-  const campaign = s.autonomy === "campaign";
-  const settings = {
-    autonomy: campaign ? "campaign" : "standard",
-    max_turns: clamp(s.max_turns, 4, 500, campaign ? 40 : 16),
-    budget_usd: clamp(s.budget_usd, 0.1, 1000, campaign ? 5 : 5),
-    hard_budget_usd: clamp(s.hard_budget_usd, 0, 10000, campaign ? 25 : 0),
-    auto_extend: campaign ? s.auto_extend !== false : s.auto_extend === true,
-    max_extensions: clamp(s.max_extensions, 0, 500, campaign ? 50 : 3),
-    extension_turns: clamp(s.extension_turns, 1, 200, campaign ? 20 : 8),
-    extension_writes: clamp(s.extension_writes, 0, 10000, campaign ? 200 : 50),
-    extension_budget_usd: clamp(s.extension_budget_usd, 0, 1000, 5),
-    goal_audit: campaign ? s.goal_audit !== false : s.goal_audit === true,
-    max_goal_audits: clamp(s.max_goal_audits, 0, 20, 3),
-    continuous_improvement: s.continuous_improvement !== false,
-    max_improve_cycles: clamp(s.max_improve_cycles, 0, 100, campaign ? 20 : 5),
-    min_impact: ["low", "medium", "high"].includes(s.min_impact) ? s.min_impact : "medium",
-    handoff_every_turns: clamp(s.handoff_every_turns, 0, 40, campaign ? 8 : 4),
-    max_failures: clamp(s.max_failures, 1, 20, campaign ? 5 : 3),
-    max_wallclock_min: clamp(s.max_wallclock_min, 0, 1440, campaign ? 480 : 0),
-    lease_ms: clamp(s.lease_ms, 1000, 3_600_000, campaign ? 600000 : 300000),
-    worker_timeout_ms: clamp(s.worker_timeout_ms, 1000, 7_200_000, 1_800_000),
-    max_writes: clamp(s.max_writes, 0, 100_000, campaign ? 500 : 0),
-    isolation: s.isolation === "worktree" ? "worktree" : "none",
-  };
+  const settings = normalizeSettings(data.settings);
+  const campaign = settings.autonomy === "campaign";
+  if (
+    settings.require_e2e &&
+    checks.length > 0 &&
+    !checks.some((c) => c.kind === "e2e" || c.kind === "smoke")
+  )
+    errors.push("at least one e2e or smoke check is required in relentless mode");
 
   const requirements = [];
   if (Array.isArray(data.requirements)) {

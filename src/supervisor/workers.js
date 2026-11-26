@@ -8,18 +8,16 @@ export const workers = {
   async runWorkers(leadID, root, state, tasks, workRoot) {
     const now = Date.now();
     const progress = await this.d.loadProgress(root);
-    const active = new Set(
-      [...this.workers.values()].filter((w) => w.root === root).map((w) => w.sessionID)
-    );
+    const attemptLimit = this.taskAttemptLimit(state);
     const open = tasks.filter(
       (t) =>
         t.status !== this.d.TASK_STATUS.COMPLETED &&
-        this.d.retryable(progress, t.id) &&
+        this.d.retryable(progress, t.id, attemptLimit) &&
         !this.d.isLeased(progress, t.id, now) &&
         !this.taskIsActive(root, t.id)
     );
     if (!open.length || !this.enableWorkers) return { ran: false };
-    const waves = this.d.wavesFor(open, Math.max(0, this.maxWorkers - active.size));
+    const waves = this.d.wavesFor(open, this.maxWorkers);
     if (!waves.length) return { ran: false };
     const objective = this.d.objectiveOf(await this.readMission(root));
     const workerModel =
@@ -27,8 +25,21 @@ export const workers = {
     let ran = false;
 
     for (const wave of waves) {
+      // Recompute capacity per wave: roles and long-running workers from an
+      // earlier wave may still be in flight.
+      const capacity = Math.max(0, this.maxWorkers - this.activeWorkerCount(root));
+      if (capacity === 0) break;
+      const batch = wave.slice(0, Math.min(wave.length, capacity));
       const spawned = [];
-      for (const task of wave) {
+      for (const task of batch) {
+        const conflicts = this.d.lockFiles(this.fileLocks, task.id, task.files ?? []);
+        if (conflicts.length) {
+          await this.journal(
+            root,
+            `task #${task.id} skipped: files locked by another task (${conflicts.join(", ")})`
+          );
+          continue;
+        }
         let id;
         try {
           const created = await this.ctx.session.create({
@@ -39,13 +50,17 @@ export const workers = {
           });
           id = created?.id ?? created?.data?.id;
         } catch (err) {
+          this.d.unlockFiles(this.fileLocks, task.id);
           await this.journal(
             root,
             `worker spawn failed for task ${task.id}: ${this.d.shortError(err)}`
           );
           continue;
         }
-        if (!id) continue;
+        if (!id) {
+          this.d.unlockFiles(this.fileLocks, task.id);
+          continue;
+        }
         this.bind(id, root, false);
         this.workers.set(id, { root, taskId: task.id, leadID, role: this.d.ROLE.IMPLEMENTER });
         this.roles.set(id, this.d.ROLE.IMPLEMENTER);
@@ -64,7 +79,8 @@ export const workers = {
         const s = await this.d.loadState(root);
         const leased = await this.d.loadProgress(root);
         const ttl = Number(state.lease_ms) || 600000;
-        for (const w of spawned) this.d.claim(leased, w.task.id, w.id, Date.now(), ttl);
+        for (const w of spawned)
+          this.d.claim(leased, w.task.id, w.id, Date.now(), ttl, this.taskAttemptLimit(s));
         s.worker_sessions = [
           ...new Set([...(s.worker_sessions ?? []), ...spawned.map((w) => w.id)]),
         ].slice(-RUN_HISTORY_LIMIT);
@@ -122,6 +138,7 @@ export const workers = {
     const fresh = await this.d.loadState(root);
     const leased = await this.d.loadProgress(root);
     const taskList = await this.d.loadTasks(root);
+    const workerCost = await this.sessionCost(w.id).catch(() => null);
     const report = fresh.task_reports?.[String(w.task.id)];
     const session = await this.ctx.session.get({ sessionID: w.id }).catch(() => null);
     const lease = leased.find((p) => p.id === w.task.id);
@@ -136,20 +153,29 @@ export const workers = {
     } else {
       fresh.metrics = this.d.recordMetrics(fresh.metrics, { agentsFailed: 1, agentReclaims: 1 });
       await this.saveStateSafe(root, fresh);
-      this.d.fail(leased, w.task.id, report?.summary ?? "no worker report", Date.now());
+      const limit = this.taskAttemptLimit(fresh);
+      this.d.fail(leased, w.task.id, report?.summary ?? "no worker report", Date.now(), limit);
       const t = taskList.find((x) => x.id === w.task.id);
       if (t)
-        t.status = this.d.retryable(leased, w.task.id)
+        t.status = this.d.retryable(leased, w.task.id, limit)
           ? this.d.TASK_STATUS.PENDING
           : this.d.TASK_STATUS.FAILED;
     }
     await this.serialize(root, async () => {
       const s = await this.d.loadState(root);
       s.agent_runs = (s.agent_runs ?? []).map((r) =>
-        r.sessionID === w.id ? { ...r, status: "done" } : r
+        r.sessionID === w.id
+          ? { ...r, status: "done", cost: Math.max(Number(r.cost) || 0, workerCost ?? 0) }
+          : r
       );
+      if (workerCost !== null)
+        s.cost_usd = this.d.applyCost(
+          s,
+          this.missionCostTotal(s, this.generationCosts?.get(root) ?? 0)
+        );
       await this.saveStateSafe(root, s);
     });
+    this.d.unlockFiles(this.fileLocks, w.task.id);
     this.workers.delete(w.id);
     this.roles.delete(w.id);
     this.bySession.delete(w.id);
@@ -158,34 +184,6 @@ export const workers = {
     await Promise.all([this.saveProgressSafe(root, leased), this.saveTasksSafe(root, taskList)]);
     await this.journal(root, this.d.reportsText(fresh.task_reports ?? {}));
     if (report && report.status !== "failed") this.scheduleLeadTick(leadID);
-  },
-
-  async verify(root, workRoot) {
-    const [criteria, stored, cachedState] = await Promise.all([
-      this.d.loadCriteria(root),
-      this.d.loadTasks(root),
-      this.d.loadState(root),
-    ]);
-    const stamp = await this.d.workspaceStamp(workRoot);
-    let results = await this.d.runChecks(workRoot, criteria, {
-      stamp,
-      cache: cachedState.check_cache,
-    });
-    const applied = this.d.applyTaskResults(stored, results);
-    const tasks = applied.tasks;
-    if (applied.changed) {
-      await this.saveTasksSafe(root, tasks);
-      results = await this.d.runChecks(workRoot, criteria, { stamp, cache: null });
-    }
-    // Reload inside the lock: a worker may have written a report or released a
-    // lease while the checks were running. Re-saving the state we loaded at
-    // the start would silently drop that update.
-    await this.serialize(root, async () => {
-      const fresh = await this.d.loadState(root);
-      fresh.check_cache = { stamp, signature: this.d.criteriaSignature(criteria.checks), results };
-      await this.saveStateSafe(root, fresh);
-    });
-    return { results, tasks };
   },
 
   recordTurn(state, results, tasks, countTurn = true) {
@@ -226,12 +224,7 @@ export const workers = {
   async sessionCost(sessionID) {
     try {
       const messages = await this.ctx.session.context({ sessionID });
-      let total = 0;
-      for (const item of messages ?? []) {
-        const info = item?.info ?? item;
-        if (info?.role === "assistant" && Number.isFinite(info.cost)) total += info.cost;
-      }
-      return total;
+      return this.d.costFromContext(messages);
     } catch {
       return null;
     }

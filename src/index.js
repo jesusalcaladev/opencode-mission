@@ -63,6 +63,7 @@ export default Plugin.define({
     await supervisor.init();
     supervisor.startEventRecovery();
     supervisor.startRescueTimer();
+    supervisor.startWakeWatcher();
     const registrations = [];
 
     registrations.push(

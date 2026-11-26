@@ -15,6 +15,13 @@ src/
   tool-definitions.js      mission_* tool registration (extracted from index)
   supervisor.js            thin coordinator: constructor + THE main turn loop
   supervisor/
+    cost.js                aggregate cost across lead/workers/roles/generate
+    quality.js             optional mutation (negative-control) runner
+    verification.js        turn check results into task completion + baseline
+    reviews.js             two independent reviewers with distinct models
+    wake.js                consume external WAKE and re-admit the lead
+    failures.js            backoff, model rotation, relentless failure reset
+    spawn-tools.js         lead-only mission_spawn (verifiable task + worker)
     deps.js / util.js      dependency barrel + error formatting
     decisions.js           stop/auto-extend/handoff/nudge helpers
     state.js               write queue, bindings, state accessors
@@ -42,12 +49,18 @@ src/
   planner.js               facade for ./planner/*
   planner/
     prompt.js              planner prompt + safe command rules
+    settings.js            normalize plan settings (relentless = 0 ceilings)
     normalize.js           plan validation + monotonic rules
     plan.js                fallback plan + createPlan
   team.js                  wave scheduling and worker prompts (pure)
   mission.js               facade for pure modules and persistence
   mission/
     state.js               constants, defaults, task normalization (pure)
+    cost.js                pure per-session cost merge (monotonic)
+    quality.js             mutation/vacuity decision rules (pure)
+    locks.js               per-file locks for a shared workspace (pure)
+    wake.js                external WAKE contract (pure)
+    autonomy.js            campaign/relentless settings + effortLimit
     decide.js              termination and task completion rules (pure)
     memory.js              journal distillation and brief construction (pure)
     lease.js               claim / renew / expire / retry (pure)
@@ -121,6 +134,11 @@ is rejected and the lease is released for retry.
 13. Every supervisor mixin reaches dependencies only through `this.d`; no mixin
     destructures the barrel. No source file exceeds 250 lines.
 14. `npm run quality` (syntax, lint, format, typecheck, coverage) must stay green.
+15. A check green at baseline cannot complete a task; re-plan/goal-audit checks start
+    red. `relentless` may extend soft ceilings but never `STOP`, `PAUSE`, hard budget,
+    wall-clock deadline or `test-erosion`.
+16. Cost is summed across every session of the mission and never decreases; an
+    external watchdog only writes `WAKE` — only the live supervisor prompts sessions.
 
 ## Failure model
 
