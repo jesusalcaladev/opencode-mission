@@ -93,6 +93,7 @@ import {
   CAMPAIGN_EXTEND_WRITES,
 } from "./mission/chain.js";
 import { tokensFromContext, applyTokens, mergeTokenEntries } from "./mission/tokens.js";
+import { forecastBudget } from "./mission/forecast.js";
 import {
   QUEUE_FILE,
   enqueue as queueEnqueue,
@@ -239,6 +240,7 @@ export {
   tokensFromContext,
   applyTokens,
   mergeTokenEntries,
+  forecastBudget,
   QUEUE_FILE,
   queueEnqueue,
   sortQueue,

@@ -17,6 +17,15 @@ export type MissionSnapshot = {
   cost_usd: number;
   budget_usd: number;
   hard_budget_usd: number;
+  tokens: number;
+  max_tokens: number;
+  token_pct: number;
+  forecast_cost_usd: number;
+  forecast_tokens: number;
+  forecast_minutes: number;
+  forecast_confidence: string;
+  over_hard_budget: boolean;
+  over_token_budget: boolean;
   writes: number;
   max_writes: number;
   extensions: number;
@@ -67,11 +76,12 @@ export type MissionSnapshot = {
 export type MissionModel = {
   snapshot: MissionSnapshot | null;
   missions: Array<{ root: string; id: string; objective: string; status: string; pct: number }>;
+  queue: Array<{ id: string; objective: string; priority: number; status: string }>;
   updatedAt: number;
 };
 
 export function initialModel(): MissionModel {
-  return { snapshot: null, missions: [], updatedAt: 0 };
+  return { snapshot: null, missions: [], queue: [], updatedAt: 0 };
 }
 
 export function useMissionModel() {

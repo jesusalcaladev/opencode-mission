@@ -8,6 +8,8 @@ import path from "node:path";
 import { selectTask } from "../mission/decide.js";
 import { STATUS, TASK_STATUS, JOURNAL_TAIL_CHARS } from "../mission/state.js";
 import { readJournalTail } from "../mission.js";
+import { forecastBudget } from "../mission/forecast.js";
+import { QUEUE_FILE } from "../mission/queue.js";
 import { metricsFromState, metricsLines } from "../mission/metrics.js";
 
 export const cacheDir = () =>
@@ -179,6 +181,7 @@ export async function loadMission(root) {
   const hardBudget = Number(state?.hard_budget_usd) || 0;
   const history = Array.isArray(state?.history) ? state.history.slice(-40) : [];
   const status = hasState ? String(state.status ?? STATUS.RUNNING) : "idle";
+  const forecast = forecastBudget(state, now);
 
   return {
     root,
@@ -230,6 +233,18 @@ export async function loadMission(root) {
           ? (Date.parse(state.finished_at) || now) - started
           : 0,
     budget_pct: budget > 0 ? Math.round(ratio(cost, budget) * 100) : 0,
+    tokens: Number(state?.tokens) || 0,
+    max_tokens: Number(state?.max_tokens) || 0,
+    token_pct:
+      Number(state?.max_tokens) > 0
+        ? Math.round(ratio(Number(state?.tokens) || 0, Number(state?.max_tokens)) * 100)
+        : 0,
+    forecast_cost_usd: forecast.forecast_cost_usd,
+    forecast_tokens: forecast.forecast_tokens,
+    forecast_minutes: forecast.forecast_minutes,
+    forecast_confidence: forecast.confidence,
+    over_hard_budget: forecast.over_hard_budget,
+    over_token_budget: forecast.over_token_budget,
     turn_pct: maxTurns > 0 ? Math.round(ratio(turn, maxTurns) * 100) : 0,
     active: status === STATUS.RUNNING || status === STATUS.PAUSED,
     updatedAt: now,
@@ -273,6 +288,13 @@ export async function loadTuiModel({ missionsRoot, maxMissions = 12, sessionID }
   const pointer = await readPointer();
   const registry = await readRegistry();
   const roots = await discoverRoots(missionsRoot, maxMissions);
+  const queueData = missionsRoot ? await readJson(path.join(missionsRoot, QUEUE_FILE), []) : [];
+  const queue = (Array.isArray(queueData) ? queueData : []).slice(0, 12).map((e) => ({
+    id: String(e?.id ?? ""),
+    objective: String(e?.objective ?? "").slice(0, 100),
+    priority: Number(e?.priority) || 0,
+    status: String(e?.status ?? "pending"),
+  }));
 
   // The active session's workspace must never be dropped by the discovery cap.
   const ownRoots = sessionID
@@ -307,5 +329,5 @@ export async function loadTuiModel({ missionsRoot, maxMissions = 12, sessionID }
     })
     .slice(0, maxMissions);
   const snapshot = selectSnapshot({ sessionID, pointer, registry, snapshots: full });
-  return { snapshot, missions, updatedAt: Date.now() };
+  return { snapshot, missions, queue, updatedAt: Date.now() };
 }

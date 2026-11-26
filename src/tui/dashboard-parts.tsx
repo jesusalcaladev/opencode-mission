@@ -45,6 +45,17 @@ export function Header(props: { snapshot: MissionSnapshot }) {
         </text>
       </box>
       <box flexDirection="row" gap={2}>
+        <text fg={g.faint}>
+          forecast {money(s().forecast_cost_usd)} · tokens {Math.round(s().forecast_tokens)} ·{" "}
+          {Math.round(s().forecast_minutes)}m ({s().forecast_confidence})
+        </text>
+        <Show when={s().max_tokens > 0}>
+          <text fg={s().over_token_budget ? g.error : g.faint}>
+            tokens {s().tokens}/{s().max_tokens}
+          </text>
+        </Show>
+      </box>
+      <box flexDirection="row" gap={2}>
         <text fg={g.faint}>history </text>
         <text fg={g.interactive}>{sparkline(s().history, 20)}</text>
         <text fg={g.faint}>
@@ -74,7 +85,10 @@ export function MetricsPanel(props: { snapshot: MissionSnapshot }) {
   );
 }
 
-export function DashboardBody(props: { snapshot: MissionSnapshot }) {
+export function DashboardBody(props: {
+  snapshot: MissionSnapshot;
+  queue?: Array<{ id: string; objective: string; priority: number; status: string }>;
+}) {
   const g = useColors();
   const s = () => props.snapshot;
   return (
@@ -121,6 +135,18 @@ export function DashboardBody(props: { snapshot: MissionSnapshot }) {
           </Section>
         </box>
       </box>
+      <Show when={(props.queue?.length ?? 0) > 0}>
+        <box flexDirection="column">
+          <text fg={g.accent}>QUEUE</text>
+          <For each={props.queue?.slice(0, 4)}>
+            {(entry) => (
+              <text fg={g.faint}>
+                [{entry.status}] p{entry.priority} {truncate(entry.objective, 60)}
+              </text>
+            )}
+          </For>
+        </box>
+      </Show>
     </box>
   );
 }

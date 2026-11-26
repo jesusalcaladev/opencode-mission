@@ -41,6 +41,10 @@ harness keeps working across many budget windows:
 - the goal auditor checks requirements before completion. Uncovered requirements
   become new tasks/e2e checks instead of a false “complete”.
 
+The dashboard (`ctrl+shift+m`) shows a **forecast** of final cost, tokens and
+minutes derived from recorded turns, plus the first queued missions. A red token
+counter means the projected spend will cross `max_tokens`.
+
 Monitor it from the TUI with `ctrl+shift+m` (dashboard) or from disk with
 `state.json` (look at `history`, `agent_runs`, `goal_audits`, `extensions`).
 

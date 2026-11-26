@@ -18,7 +18,7 @@ export function MissionDashboard() {
       gap={1}
     >
       <Show when={model.snapshot} fallback={<EmptyState />}>
-        {(snapshot) => <DashboardBody snapshot={snapshot()} />}
+        {(snapshot) => <DashboardBody snapshot={snapshot()} queue={model.queue} />}
       </Show>
       <box flexDirection="row" gap={2}>
         <text fg={g.faint}>n new · s stop · p pause · r resume · o open · esc back</text>

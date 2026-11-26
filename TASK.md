@@ -61,7 +61,7 @@ hard caps absolutos, `this.d`, archivos <250 líneas, `npm run quality` verde).
 
 ## Fase 5 · Cierre y verificación
 
-- [x] 5.1 `npm run check`, `npm test`, `npm run quality` (coverage ~86.7/69.1/83.2) en verde: 194 tests.
+- [x] 5.1 `npm run check`, `npm test`, `npm run quality` (coverage ~86.7/69.1/83.2) en verde: 196 tests.
 - [x] 5.2 `ARCHITECTURE.md`, `CONTRACT.md`, `README.md`, `RUNBOOK.md`, `CHANGELOG.md` actualizados.
 - [x] 5.3 Smoke real: `test/smoke.test.js` corre `demos/cli` con checks ejecutables hasta `complete`.
 - [x] 5.4 Invariantes revisados. Módulos nuevos <250 líneas; `tui/model.js` (311) es deuda previa, `roles-pipeline`/`workers` bajaron respecto al baseline.
@@ -79,10 +79,12 @@ hard caps absolutos, `this.d`, archivos <250 líneas, `npm run quality` verde).
 - [x] 6.9 Cola persistente priorizada (`mission-queue.json`) con `/mission queue add|list|run|clear`.
 - [x] 6.10 Scheduler con `parallelSlots`, `autoQueue`, `queueIntervalMs`, `maxQueueAttempts` y recuperación tras reinicio.
 - [x] 6.11 Test de carga: 8 misiones paralelas con sesiones/workspaces independientes.
+- [x] 6.12 Predicción de presupuesto (`forecastBudget`) a partir de turnos/costo/tokens/historial.
+- [x] 6.13 Dashboard TUI: forecast, contador de tokens y vista de la cola persistente.
 
 ## Resultado de ejecución
 
-- 194 tests verdes; `npm run quality` exit 0.
+- 196 tests verdes; `npm run quality` exit 0.
 - Bug real corregido: `pruneJournalArchives` ordenaba por nombre (sufijo aleatorio) y podía borrar las líneas más nuevas bajo carga; ahora ordena por `mtime`.
 - `demos/cli` tenía un check vacuo (`node --test` sin archivos salía exit 0); ahora exige `contains:pass 3`, por lo que el baseline es rojo y la verificación es real.
 

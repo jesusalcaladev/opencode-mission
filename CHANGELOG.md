@@ -8,6 +8,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Budget forecast from durable telemetry (cost/tokens/minutes per turn) with
+  projected hard-budget/token overrun flags in the TUI dashboard.
 - Persistent priority queue for parallel missions: `/mission queue add|list|run`,
   priority + age ordering, bounded `parallelSlots`, optional `autoQueue`, and
   recovery of sessions that died across restarts.

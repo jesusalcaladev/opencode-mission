@@ -47,6 +47,9 @@ turns) and **task leases** (a dead worker's task is reclaimed instead of stuck f
 - **Continuous improvement** — after the objective is met, an auditor proposes
   real improvements and the harness implements them in bounded cycles until no
   valuable work remains (or a budget stops it).
+- **Budget forecast** — the TUI extrapolates cost/tokens/minutes from the mission's
+  own history and flags projected hard-budget/token overruns; the persistent
+  mission queue is also visible in the dashboard.
 - **Mission Control TUI** — a live HUD above the prompt, a sidebar card, footer
   badges, a session panel and a full-screen dashboard. On empty sessions it shows
   a clear call to action instead of nothing. `ctrl+shift+m` opens the dashboard.
