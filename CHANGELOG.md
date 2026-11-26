@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Persistent priority queue for parallel missions: `/mission queue add|list|run`,
+  priority + age ordering, bounded `parallelSlots`, optional `autoQueue`, and
+  recovery of sessions that died across restarts.
+- `max_tokens`: hard, non-extendable token ceiling with per-session accounting.
 - `autonomy: relentless` / `never_give_up: true`: unlimited soft effort ceilings.
   `blocked` forces a re-plan, high review findings force rework, goal gaps loop,
   failed tasks retry forever, and supervisor errors recover. Hard budget,

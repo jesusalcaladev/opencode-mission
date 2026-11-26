@@ -21,6 +21,7 @@ const HELP = [
   "/mission start <what to do>   Plan the objective, then run it autonomously with parallel workers",
   "/mission start <dir>          Start a pre-authored mission in an existing directory",
   "/mission parallel A | B | C   Start up to 8 independent missions in parallel",
+  "/mission queue add A [p:5]   Queue a mission (priority); use list/run/clear",
   "/mission status        Show state, checks and next task",
   "/mission research <q>  Research a question on the web, with images and sources",
   "/mission pause         Pause at the next idle boundary (remove PAUSE to resume)",
@@ -65,6 +66,7 @@ export default Plugin.define({
     supervisor.startEventRecovery();
     supervisor.startRescueTimer();
     supervisor.startWakeWatcher();
+    supervisor.startQueueTimer();
     const registrations = [];
 
     registrations.push(
@@ -106,6 +108,37 @@ export default Plugin.define({
               }
               case "parallel": {
                 reply = await supervisor.startParallel(sessionID, arg);
+                break;
+              }
+              case "queue": {
+                const [action, ...queueArgs] = arg.split(/\s+/);
+                const priorityToken = queueArgs.find((t) => /^p:-?\d+$/.test(t));
+                const priority = priorityToken ? Number(priorityToken.slice(2)) : 0;
+                const objective = queueArgs
+                  .filter((t) => t !== priorityToken)
+                  .join(" ")
+                  .trim();
+                if (action === "list") {
+                  const entries = await supervisor.loadQueue();
+                  const stats = supervisor.d.queueStats(entries);
+                  reply = [
+                    `Queue: ${stats.pending} pending · ${stats.running} running · ${stats.done} done · ${stats.failed} failed`,
+                    ...supervisor.d
+                      .sortQueue(entries)
+                      .map(
+                        (e) =>
+                          `- ${e.id} [${e.status}] p:${e.priority ?? 0} ${String(e.objective).slice(0, 100)}`
+                      ),
+                  ].join("\n");
+                } else if (action === "run") {
+                  reply = await supervisor.runQueue(Number(queueArgs[0]) || 0);
+                } else if (action === "clear") {
+                  await supervisor.saveQueue([]);
+                  reply = "Queue cleared.";
+                } else {
+                  const text = (action ? [action, ...queueArgs] : []).join(" ").trim();
+                  reply = await supervisor.enqueueMission(text, priority);
+                }
                 break;
               }
               case "research": {

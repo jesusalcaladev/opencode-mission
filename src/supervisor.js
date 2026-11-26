@@ -25,6 +25,7 @@ import { failures } from "./supervisor/failures.js";
 import { verification } from "./supervisor/verification.js";
 import { reviews } from "./supervisor/reviews.js";
 import { parallel } from "./supervisor/parallel.js";
+import { queueManager } from "./supervisor/queue-manager.js";
 
 export class Supervisor {
   constructor(ctx, options = {}) {
@@ -265,5 +266,6 @@ Object.assign(
   failures,
   verification,
   reviews,
-  parallel
+  parallel,
+  queueManager
 );

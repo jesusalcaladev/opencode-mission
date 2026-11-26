@@ -129,6 +129,9 @@ opencode api get /api/plugin | grep mission
 ```text
 /mission start Create alpha.txt containing alpha and beta.txt containing beta
 /mission parallel build alpha CLI | build beta CLI | write the docs
+/mission queue add write the docs p:5
+/mission queue list
+/mission queue run 2
 /mission research duckduckgo vs brave search APIs for a research agent
 /mission status
 /mission pause
@@ -181,6 +184,8 @@ designed to be ported to other harnesses (a zode implementation is planned).
 | ------------------------------------ | ------------------------------------------------------------ |
 | `/mission start <objective or path>` | Plan and start a mission, or run a pre-authored one          |
 | `/mission parallel A \| B \| C`      | Start up to 8 independent missions in parallel lead sessions |
+| `/mission queue add A [p:N]`         | Add a mission to the persistent priority queue               |
+| `/mission queue list` / `run [n]`    | Inspect or launch queued missions                            |
 | `/mission status`                    | Show state, checks, tasks, budget and model                  |
 | `/mission research <question>`       | Research with web sources, images and a written report       |
 | `/mission pause`                     | Pause at the next idle boundary (remove `PAUSE` to resume)   |
@@ -226,6 +231,10 @@ are aliases.
 | `missionsRoot`        | `<cwd>/missions` | Where generated mission workspaces live                 |
 | `maxWorkers`          | `3`              | Max parallel sub-agents per wave (no hard cap)          |
 | `wakeIntervalMs`      | `15000`          | How often the internal WAKE watcher scans               |
+| `parallelSlots`       | `8`              | Max running missions from the persistent queue          |
+| `autoQueue`           | `false`          | Auto-launch queued missions on a timer                  |
+| `queueIntervalMs`     | `30000`          | Queue scheduler interval                                |
+| `maxQueueAttempts`    | `3`              | Failed queue launches before an entry is marked failed  |
 | `maxWorkerRevives`    | `1` / `∞`        | Quiet-worker re-admits (unlimited in relentless)        |
 | `imageModel`          | auto             | `{providerID, id}` used by `mission_image_generate`     |
 | `workerTimeoutMs`     | `600000`         | Max wait for a read-only role agent                     |

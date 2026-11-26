@@ -93,6 +93,17 @@ import {
   CAMPAIGN_EXTEND_WRITES,
 } from "./mission/chain.js";
 import { tokensFromContext, applyTokens, mergeTokenEntries } from "./mission/tokens.js";
+import {
+  QUEUE_FILE,
+  enqueue as queueEnqueue,
+  sortQueue,
+  runningCount,
+  nextBatch,
+  markRunning,
+  markFinished,
+  requeueDead,
+  queueStats,
+} from "./mission/queue.js";
 import { mutationSettings, mutationDecision } from "./mission/quality.js";
 import { normalizeLockPath, lockFiles, unlockFiles, lockedBy } from "./mission/locks.js";
 import { WAKE_FILE, WAKE_AGE_MS, needsWake } from "./mission/wake.js";
@@ -228,6 +239,15 @@ export {
   tokensFromContext,
   applyTokens,
   mergeTokenEntries,
+  QUEUE_FILE,
+  queueEnqueue,
+  sortQueue,
+  runningCount,
+  nextBatch,
+  markRunning,
+  markFinished,
+  requeueDead,
+  queueStats,
   mutationSettings,
   mutationDecision,
   normalizeLockPath,

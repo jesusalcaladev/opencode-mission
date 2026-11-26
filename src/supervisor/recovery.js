@@ -19,6 +19,7 @@ export const recovery = {
       await this.recoverStaleWorkers(root, state);
       await this.maybeAutoResume(entry.sessionID, root);
     }
+    await this.recoverQueue();
   },
 
   async recoverStaleWorkers(root, state = null) {

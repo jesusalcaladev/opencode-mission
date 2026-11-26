@@ -120,6 +120,21 @@ objectives per command; the current session is untouched. `/mission status` in
 any lead session shows that mission only. `GLOBAL_MEMORY.md` shares distilled
 decisions across them when `global_memory: true`.
 
+For more than 8 objectives, or to survive restarts, use the persistent queue
+at `<missionsRoot>/mission-queue.json`:
+
+```text
+/mission queue add build alpha CLI p:5
+/mission queue add write the docs p:1
+/mission queue list
+/mission queue run 2
+```
+
+`parallelSlots` (default 8) bounds how many queued missions run at once; with
+`autoQueue: true` the scheduler launches pending entries every `queueIntervalMs`
+(30 s) and recovers sessions that died. Queue entries are sorted by priority,
+then age. Failed launches are retried up to `maxQueueAttempts` (3).
+
 ## Chaining missions for hours
 
 Write `.mission/roadmap.md` with one item per mission:
