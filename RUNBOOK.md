@@ -157,6 +157,18 @@ the **same workspace**, carrying `memory.md` forward. No human input needed.
 If a budget stop fires, create `EXTEND` to grant one more block of turns/writes
 (max `max_extensions` times). Without `EXTEND`, the stop is final.
 
+## Sandboxing criteria (opt-in)
+
+Set `sandbox: copy` in `.mission/mission.md` (or per check with `sandbox: "copy"`).
+Each criterion then runs in a disposable copy of the workspace with a minimal
+environment (`PATH`, locale, `HOME` pointing at the copy, `CI=1`). Credentials
+and unrelated env vars are removed, and writes made by a check cannot touch the
+real project. `node_modules` is symlinked so test runners keep working.
+
+This is a **soft** sandbox (no OS namespaces, no root required): it protects the
+workspace and credentials, not the host from a malicious local binary. Combine
+it with `strict_checks: true`. Default `none` preserves existing criteria.
+
 ## Verify the harness itself
 
 ```sh

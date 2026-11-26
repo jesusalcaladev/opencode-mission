@@ -148,6 +148,8 @@ async function runMission(testCase, base, maxTurns) {
   const journal = await readFile(path.join(missionDir(root), "journal.md"), "utf8").catch(() => "");
   const wakeExists = await exists(path.join(missionDir(root), "WAKE"));
   const globalExists = await exists(path.join(base, "GLOBAL_MEMORY.md"));
+  const absentFile = testCase.policy?.expect_absent;
+  const workspaceClean = absentFile ? !(await exists(path.join(root, absentFile))) : true;
   const costUsd = Number(state.cost_usd) || 0;
   const tokens = Number(state.tokens) || 0;
   const scored = scoreCase(testCase.expect ?? {}, {
@@ -163,6 +165,7 @@ async function runMission(testCase, base, maxTurns) {
     refused: checks.some((c) => c.refused === true),
     wake_exists: wakeExists,
     global_exists: globalExists,
+    workspace_clean: workspaceClean,
     cost_usd: costUsd,
     tokens,
     journal,
@@ -184,6 +187,7 @@ async function runMission(testCase, base, maxTurns) {
     refused: checks.some((c) => c.refused === true),
     wake_exists: wakeExists,
     global_exists: globalExists,
+    workspace_clean: workspaceClean,
     cost_usd: costUsd,
     tokens,
   };

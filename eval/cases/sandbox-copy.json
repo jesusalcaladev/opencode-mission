@@ -1,0 +1,31 @@
+{
+  "id": "sandbox-copy",
+  "mode": "mission",
+  "objective": "Sandboxed checks cannot mutate the real workspace",
+  "criteria": [
+    {
+      "id": "mut",
+      "cmd": "echo mutated > marker.txt && echo ok",
+      "expect": "contains:ok",
+      "timeout_ms": 5000
+    }
+  ],
+  "tasks": [],
+  "settings": {
+    "autonomy": "standard",
+    "continuous_improvement": false,
+    "max_turns": 2,
+    "handoff_every_turns": 0,
+    "enableWorkers": false,
+    "enableRoles": false,
+    "stage": "done",
+    "sandbox": "copy"
+  },
+  "policy": { "expect_absent": "marker.txt" },
+  "expect": {
+    "status": "complete",
+    "finish_reason": "all criteria green",
+    "checks_green": 1,
+    "workspace_clean": true
+  }
+}

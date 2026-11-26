@@ -32,6 +32,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Optional `sandbox: copy` for criteria: disposable workspace copy + minimal
+  environment, with per-check override and dedicated eval.
 - Architecture checker in `npm run check`: ≤250 lines per source file, no test
   globals in `src/`, no barrel destructuring in mixins, no terminal writes
   outside `decide()`/`finish`, and injected eval/CI guardrails.

@@ -35,6 +35,7 @@ export const planning = {
       `mutation_checks: ${s.mutation_checks === true}`,
       `require_e2e: ${s.require_e2e === true}`,
       `strict_checks: ${s.strict_checks === true}`,
+      `sandbox: ${s.sandbox === "copy" ? "copy" : "none"}`,
       `global_memory: ${s.global_memory === true}`,
       `lease_ms: ${s.lease_ms ?? 300000}`,
       `worker_timeout_ms: ${s.worker_timeout_ms ?? 1800000}`,

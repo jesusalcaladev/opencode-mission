@@ -269,6 +269,7 @@ are aliases.
 | `mutation_checks`        | `false`    | Reject checks that stay green without the owned files                                 |
 | `require_e2e`            | `false`    | Require an e2e/smoke check (default in relentless)                                    |
 | `strict_checks`          | `false`    | Refuse unsafe/vacuous criteria commands from **any** source (default in relentless)   |
+| `sandbox`                | `none`     | `copy` runs checks in a disposable workspace copy with a minimal env                  |
 | `global_memory`          | `false`    | Share distilled decisions across missions under the same root (default in relentless) |
 | `auto_extend`            | `false`    | Extend soft budgets while progress is verified                                        |
 | `hard_budget_usd`        | `0`        | Absolute cost cap that extensions never cross                                         |
@@ -335,8 +336,8 @@ dashboard opens on demand as a session panel or full-screen route via
 
 `eval/cases/*.json` defines end-to-end scenarios (standard completion, baseline
 vacuity, blocked → re-plan, review rework, token ceiling, strict checks, WAKE
-watchdog, parallel queue, multi-session cost, global memory, model rotation).
-`scripts/mission-eval.mjs` runs them through the real
+watchdog, parallel queue, multi-session cost, global memory, model rotation,
+sandboxed checks). `scripts/mission-eval.mjs` runs them through the real
 `Supervisor` with a deterministic fake OpenCode context — no network, no paid
 models, no writes outside temp dirs. `eval/baseline.json` gates regressions in CI.
 

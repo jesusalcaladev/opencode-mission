@@ -37,7 +37,9 @@ nudged back to work. A mission that is genuinely impossible declares `blocked` w
 `expect` is `exit0` (default) or `contains:<text>` (requires exit 0 **and** the substring
 in stdout). With `strict_checks: true` (default in relentless), unsafe or vacuous
 commands are refused **before execution** regardless of who authored the criteria;
-the check is recorded as failed with a `refused` flag and evidence.
+the check is recorded as failed with a `refused` flag and evidence. With
+`sandbox: copy`, each check executes in a disposable workspace copy with a
+minimal environment; real workspace mutations by a criterion are impossible.
 
 ## State machine
 

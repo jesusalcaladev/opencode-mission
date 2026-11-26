@@ -61,7 +61,7 @@ hard caps absolutos, `this.d`, archivos <250 líneas, `npm run quality` verde).
 
 ## Fase 5 · Cierre y verificación
 
-- [x] 5.1 `npm run check`, `npm test`, `npm run quality` (coverage ~86.7/69.1/83.2) en verde: 201 tests + 11 evals end-to-end.
+- [x] 5.1 `npm run check`, `npm test`, `npm run quality` (coverage ~86.7/69.1/83.2) en verde: 205 tests + 12 evals end-to-end.
 - [x] 5.2 `ARCHITECTURE.md`, `CONTRACT.md`, `README.md`, `RUNBOOK.md`, `CHANGELOG.md` actualizados.
 - [x] 5.3 Smoke real: `test/smoke.test.js` corre `demos/cli` con checks ejecutables hasta `complete`.
 - [x] 5.4 Invariantes revisados. Módulos nuevos <250 líneas; `tui/model.js` (311) es deuda previa, `roles-pipeline`/`workers` bajaron respecto al baseline.
@@ -102,14 +102,22 @@ hard caps absolutos, `this.d`, archivos <250 líneas, `npm run quality` verde).
 - [x] 8.5 3 casos eval nuevos (costo multi-sesión, memoria global, rotación) → 11/11.
 - [x] 8.6 Bug real corregido: costo de workers sobrescrito al completar en el mismo turno.
 
+## Fase 9 · Sandbox opcional de criterios
+
+- [x] 9.1 `src/mission/sandbox.js`: modo `none|copy`, override por check, allowlist de entorno.
+- [x] 9.2 `runChecks` ejecuta checks en copia desechable con `node_modules` enlazado.
+- [x] 9.3 Settings `sandbox` propagados a frontmatter, prompt, verificación y `mission_check`.
+- [x] 9.4 Eval `sandbox-copy`: un check que escribe `marker.txt` no toca el workspace real.
+- [x] 9.5 Tests unitarios de sandbox + docs (`README`, `RUNBOOK`, `CONTRACT`, `CHANGELOG`).
+
 ## Resultado de ejecución
 
-- 201 tests verdes; `npm run quality` exit 0; `npm run eval` 11/11 exit 0.
+- 205 tests verdes; `npm run quality` exit 0; `npm run eval` 12/12 exit 0.
 - Bug real corregido: `pruneJournalArchives` ordenaba por nombre (sufijo aleatorio) y podía borrar las líneas más nuevas bajo carga; ahora ordena por `mtime`.
 - `demos/cli` tenía un check vacuo (`node --test` sin archivos salía exit 0); ahora exige `contains:pass 3`, por lo que el baseline es rojo y la verificación es real.
 
 ## Límites honestos (no se promete)
 
 - `STOP`, `PAUSE`, `hard_budget_usd`, `max_wallclock_min`, `test-erosion` siguen siendo duros.
-- Sin sandbox para criterios pre-autorizados (contrato: "only trusted criteria").
+- `sandbox: copy` es un sandbox blando (copia + entorno mínimo), no namespaces de OS; no requiere root.
 - "100%" solo es defendible si los checks son ejecutables reales y no vacuos; se refuerza, pero no se promete para objetivos no verificables.

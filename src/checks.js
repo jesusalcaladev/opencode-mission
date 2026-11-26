@@ -3,9 +3,11 @@
 
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { missionDir, FILES } from "./mission.js";
+import { sandboxMode, sanitizeEnv, isSandboxedPath } from "./mission/sandbox.js";
 import { safeCheckCmd } from "./planner/prompt.js";
 
 const MAX_OUTPUT = 64 * 1024;
@@ -28,9 +30,14 @@ export function evaluateExpect(expect, { code, stdout }) {
   return code === 0;
 }
 
-export function runCommand(cmd, cwd, timeoutMs) {
+export function runCommand(cmd, cwd, timeoutMs, env) {
   return new Promise((resolve) => {
-    const child = spawn(cmd, { cwd, shell: true, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(cmd, {
+      cwd,
+      shell: true,
+      env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
     let stdout = "";
     let stderr = "";
     let settled = false;
@@ -89,6 +96,28 @@ export function criteriaSignature(checks) {
     .digest("hex");
 }
 
+/// Optional soft sandbox: run the command in a disposable workspace copy with
+/// a minimal environment, so a criterion cannot mutate the real project or
+/// read credentials. node_modules is symlinked to keep test runners working.
+async function withSandbox(root, mode, fn) {
+  if (mode !== "copy") return fn(root, process.env);
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "mission-check-"));
+  try {
+    await cp(root, tmp, {
+      recursive: true,
+      filter: (source) => !isSandboxedPath(path.relative(root, source)),
+    });
+    const modules = path.join(root, "node_modules");
+    const isDir = await stat(modules)
+      .then((info) => info.isDirectory())
+      .catch(() => false);
+    if (isDir) await symlink(modules, path.join(tmp, "node_modules"), "dir").catch(() => {});
+    return await fn(tmp, sanitizeEnv(process.env, tmp));
+  } finally {
+    await rm(tmp, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 export async function runChecks(root, criteria, options = {}) {
   const checks = Array.isArray(criteria?.checks) ? criteria.checks : [];
   if (checks.length === 0) return [];
@@ -131,15 +160,19 @@ export async function runChecks(root, criteria, options = {}) {
       const attempts = Math.max(0, Math.min(2, Number(check.retries) || 0)) + 1;
       let run = null;
       let ok = false;
-      for (let attempt = 0; attempt < attempts; attempt += 1) {
-        run = await runCommand(
-          check.cmd,
-          root,
-          Number.isFinite(check.timeout_ms) ? check.timeout_ms : 30000
-        );
-        ok = evaluateExpect(check.expect, run);
-        if (ok) break;
-      }
+      const mode = sandboxMode({ sandbox: options.sandbox }, check);
+      await withSandbox(root, mode, async (cwd, env) => {
+        for (let attempt = 0; attempt < attempts; attempt += 1) {
+          run = await runCommand(
+            check.cmd,
+            cwd,
+            Number.isFinite(check.timeout_ms) ? check.timeout_ms : 30000,
+            env
+          );
+          ok = evaluateExpect(check.expect, run);
+          if (ok) break;
+        }
+      });
       const summary = (run.stdout.trim() || run.stderr.trim() || `exit ${run.code}`)
         .split("\n")[0]
         .slice(0, 200);

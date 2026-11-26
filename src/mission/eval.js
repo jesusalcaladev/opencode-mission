@@ -16,6 +16,7 @@ const KEYS = [
   "refused",
   "wake_exists",
   "global_exists",
+  "workspace_clean",
   "switched_count",
   "model_id",
 ];

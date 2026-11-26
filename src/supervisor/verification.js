@@ -13,6 +13,7 @@ export const verification = {
       stamp,
       cache: cachedState.check_cache,
       strict: cachedState.strict_checks === true,
+      sandbox: cachedState.sandbox,
     });
     const baseline = this.d.captureBaseline(results, cachedState.check_baseline);
     const applied = this.d.applyTaskResults(stored, results, baseline);
@@ -42,6 +43,7 @@ export const verification = {
         stamp,
         cache: null,
         strict: cachedState.strict_checks === true,
+        sandbox: cachedState.sandbox,
       });
     }
     // Reload inside the lock: a worker may have written a report or released a

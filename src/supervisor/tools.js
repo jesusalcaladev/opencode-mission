@@ -59,6 +59,7 @@ export const tools = {
     const criteria = await this.d.loadCriteria(root);
     const results = await this.d.runChecks(workRoot, criteria, {
       strict: state.strict_checks === true,
+      sandbox: state.sandbox,
     });
     if (!this.workers.has(sessionID)) {
       state.last_checks = results;
