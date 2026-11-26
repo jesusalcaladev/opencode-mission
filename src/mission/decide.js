@@ -123,6 +123,12 @@ export function decideNext({
   if (state.max_turns > 0 && state.turn >= state.max_turns)
     return { type: "stop", reason: "max-turns" };
   if (
+    Number.isFinite(state.max_tokens) &&
+    state.max_tokens > 0 &&
+    (Number(state.tokens) || 0) >= state.max_tokens
+  )
+    return { type: "stop", reason: "token-budget" };
+  if (
     Number.isFinite(state.max_writes) &&
     state.max_writes > 0 &&
     (state.writes ?? 0) >= state.max_writes

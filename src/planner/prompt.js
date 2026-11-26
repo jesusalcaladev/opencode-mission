@@ -29,7 +29,7 @@ export function planPrompt(objective, workspace) {
     '  "tasks": [{"id":1,"subject":"short imperative","files":["relative/path.js"],"verify":"check_id","blocked_by":[],"milestone":"optional-id"}],',
     '  "requirements": [{"id":"req-id","text":"user-visible requirement","checks":["check_id"]}],',
     '  "milestones": [{"id":"m1","title":"Foundation"},{"id":"m2","title":"Gameplay"}],',
-    '  "settings": {"autonomy":"standard|campaign|relentless","never_give_up":false,"max_turns":40,"budget_usd":5,"hard_budget_usd":25,"max_wallclock_min":480,"auto_extend":true,"max_extensions":50,"goal_audit":true,"max_writes":500,"lease_ms":600000,"handoff_every_turns":8,"max_failures":5,"max_task_attempts":3,"max_review_attempts":2,"strict_checks":false,"global_memory":false,"isolation":"none"}',
+    '  "settings": {"autonomy":"standard|campaign|relentless","never_give_up":false,"max_turns":40,"budget_usd":5,"hard_budget_usd":25,"max_tokens":0,"max_wallclock_min":480,"auto_extend":true,"max_extensions":50,"goal_audit":true,"max_writes":500,"lease_ms":600000,"handoff_every_turns":8,"max_failures":5,"max_task_attempts":3,"max_review_attempts":2,"strict_checks":false,"global_memory":false,"isolation":"none"}',
     "}",
     "",
     "HARD RULES",

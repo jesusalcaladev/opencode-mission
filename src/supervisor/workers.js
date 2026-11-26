@@ -138,7 +138,7 @@ export const workers = {
     const fresh = await this.d.loadState(root);
     const leased = await this.d.loadProgress(root);
     const taskList = await this.d.loadTasks(root);
-    const workerCost = await this.sessionCost(w.id).catch(() => null);
+    const usage = await this.sessionUsage(w.id);
     const report = fresh.task_reports?.[String(w.task.id)];
     const session = await this.ctx.session.get({ sessionID: w.id }).catch(() => null);
     const lease = leased.find((p) => p.id === w.task.id);
@@ -165,14 +165,21 @@ export const workers = {
       const s = await this.d.loadState(root);
       s.agent_runs = (s.agent_runs ?? []).map((r) =>
         r.sessionID === w.id
-          ? { ...r, status: "done", cost: Math.max(Number(r.cost) || 0, workerCost ?? 0) }
+          ? {
+              ...r,
+              status: "done",
+              cost: Math.max(Number(r.cost) || 0, usage.cost ?? 0),
+              tokens: Math.max(Number(r.tokens) || 0, usage.tokens?.total ?? 0),
+            }
           : r
       );
-      if (workerCost !== null)
+      if (usage.cost !== null || usage.tokens) {
         s.cost_usd = this.d.applyCost(
           s,
           this.missionCostTotal(s, this.generationCosts?.get(root) ?? 0)
         );
+        s.tokens = Math.max(Number(s.tokens) || 0, this.d.mergeTokenEntries(s.agent_runs ?? []));
+      }
       await this.saveStateSafe(root, s);
     });
     this.d.unlockFiles(this.fileLocks, w.task.id);
@@ -222,12 +229,7 @@ export const workers = {
   },
 
   async sessionCost(sessionID) {
-    try {
-      const messages = await this.ctx.session.context({ sessionID });
-      return this.d.costFromContext(messages);
-    } catch {
-      return null;
-    }
+    return (await this.sessionUsage(sessionID)).cost;
   },
 
   async statusText(root) {

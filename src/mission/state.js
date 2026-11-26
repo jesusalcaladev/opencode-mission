@@ -61,6 +61,8 @@ export const initialState = () => ({
   max_turns: DEFAULT_MAX_TURNS,
   budget_usd: DEFAULT_BUDGET_USD,
   hard_budget_usd: 0,
+  max_tokens: 0,
+  tokens: 0,
   auto_extend: false,
   extension_turns: 8,
   extension_budget_usd: 5,

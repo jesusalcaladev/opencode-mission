@@ -94,6 +94,7 @@ const NEVER_EXTEND = new Set([
   "paused",
   "blocked",
   "hard-budget",
+  "token-budget",
   "test-erosion",
   "review-high",
   "stalled",

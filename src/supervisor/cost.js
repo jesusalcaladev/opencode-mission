@@ -2,6 +2,18 @@
 // generate() calls all belong to the same mission budget.
 
 export const cost = {
+  async sessionUsage(sessionID) {
+    try {
+      const messages = await this.ctx.session.context({ sessionID });
+      return {
+        cost: this.d.costFromContext(messages),
+        tokens: this.d.tokensFromContext(messages),
+      };
+    } catch {
+      return { cost: null, tokens: null };
+    }
+  },
+
   noteGeneration(root, out) {
     if (!root) return 0;
     const value = this.d.generationCost(out);
@@ -36,26 +48,42 @@ export const cost = {
       agentRuns: state.agent_runs ?? [],
     });
     const live = await Promise.all(
-      ids.map(async (id) => ({ sessionID: id, cost: await this.sessionCost(id) }))
+      ids.map(async (id) => {
+        const usage = await this.sessionUsage(id);
+        return { sessionID: id, cost: usage.cost, tokens: usage.tokens?.total ?? 0 };
+      })
     );
     const extra = (this.generationCosts?.get(root) ?? 0) + (Number(state.cost_extra_usd) || 0);
     state.cost_usd = this.d.applyCost(
       state,
       this.d.mergeCosts([...live, ...this.recordedCostEntries(state, extra)])
     );
+    state.tokens = Math.max(
+      Number(state.tokens) || 0,
+      this.d.mergeTokenEntries([
+        ...live,
+        ...(state.agent_runs ?? []).map((r) => ({ tokens: r.tokens })),
+      ])
+    );
     return state.cost_usd;
   },
 
   async recordWorkerCost(root, fresh, sessionID) {
-    const value = await this.sessionCost(sessionID);
-    if (value === null) return null;
+    const usage = await this.sessionUsage(sessionID);
+    if (usage.cost === null && !usage.tokens) return null;
     fresh.agent_runs = (fresh.agent_runs ?? []).map((run) =>
-      run.sessionID === sessionID ? { ...run, cost: Math.max(Number(run.cost) || 0, value) } : run
+      run.sessionID === sessionID
+        ? {
+            ...run,
+            cost: Math.max(Number(run.cost) || 0, usage.cost ?? 0),
+            tokens: Math.max(Number(run.tokens) || 0, usage.tokens?.total ?? 0),
+          }
+        : run
     );
     fresh.cost_usd = this.d.applyCost(
       fresh,
       this.missionCostTotal(fresh, this.generationCosts?.get(root) ?? 0)
     );
-    return value;
+    return usage.cost;
   },
 };

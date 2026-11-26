@@ -62,6 +62,7 @@ mutation_checks: true
 require_e2e: true
 strict_checks: true # refuses sudo/rm -rf/vacuous commands even in pre-authored criteria
 global_memory: true # distilled decisions flow to the next mission
+max_tokens: 2000000 # absolute, non-extendable (0 = off)
 hard_budget_usd: 25 # absolute
 max_wallclock_min: 480 # absolute (8h)
 ```
@@ -107,6 +108,17 @@ This creates a normal verified mission whose artifacts are `research/report.md`,
 websearch provider (DuckDuckGo by default, Brave when `BRAVE_SEARCH_API_KEY` is
 set). Fetching refuses private addresses. Image search uses Openverse with a
 Wikimedia fallback; `mission_image_generate` uses an image model if configured.
+
+## Parallel missions
+
+```text
+/mission parallel build alpha CLI | build beta CLI | write the docs
+```
+
+Each objective gets its own lead session, workspace and worker pool. Up to 8
+objectives per command; the current session is untouched. `/mission status` in
+any lead session shows that mission only. `GLOBAL_MEMORY.md` shares distilled
+decisions across them when `global_memory: true`.
 
 ## Chaining missions for hours
 

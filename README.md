@@ -128,6 +128,7 @@ opencode api get /api/plugin | grep mission
 
 ```text
 /mission start Create alpha.txt containing alpha and beta.txt containing beta
+/mission parallel build alpha CLI | build beta CLI | write the docs
 /mission research duckduckgo vs brave search APIs for a research agent
 /mission status
 /mission pause
@@ -176,15 +177,16 @@ designed to be ported to other harnesses (a zode implementation is planned).
 
 ## Commands and tools
 
-| Command                              | Purpose                                                    |
-| ------------------------------------ | ---------------------------------------------------------- |
-| `/mission start <objective or path>` | Plan and start a mission, or run a pre-authored one        |
-| `/mission status`                    | Show state, checks, tasks, budget and model                |
-| `/mission research <question>`       | Research with web sources, images and a written report     |
-| `/mission pause`                     | Pause at the next idle boundary (remove `PAUSE` to resume) |
-| `/mission stop`                      | Abort and keep state on disk                               |
-| `/mission resume [path]`             | Resume a stopped or interrupted mission                    |
-| `/mission help`                      | Show command help                                          |
+| Command                              | Purpose                                                      |
+| ------------------------------------ | ------------------------------------------------------------ |
+| `/mission start <objective or path>` | Plan and start a mission, or run a pre-authored one          |
+| `/mission parallel A \| B \| C`      | Start up to 8 independent missions in parallel lead sessions |
+| `/mission status`                    | Show state, checks, tasks, budget and model                  |
+| `/mission research <question>`       | Research with web sources, images and a written report       |
+| `/mission pause`                     | Pause at the next idle boundary (remove `PAUSE` to resume)   |
+| `/mission stop`                      | Abort and keep state on disk                                 |
+| `/mission resume [path]`             | Resume a stopped or interrupted mission                      |
+| `/mission help`                      | Show command help                                            |
 
 TUI commands (also in the command palette): `/mission-dashboard`,
 `/mission-panel`, `/mission-start`, `/mission-stop`, `/mission-pause`,
@@ -258,6 +260,7 @@ are aliases.
 | `global_memory`          | `false`    | Share distilled decisions across missions under the same root (default in relentless) |
 | `auto_extend`            | `false`    | Extend soft budgets while progress is verified                                        |
 | `hard_budget_usd`        | `0`        | Absolute cost cap that extensions never cross                                         |
+| `max_tokens`             | `0`        | Absolute token cap (`0` = off); non-extendable                                        |
 | `extension_turns`        | `8`        | Turns granted per extension                                                           |
 | `extension_writes`       | `50`       | Writes granted per extension                                                          |
 | `goal_audit`             | `false`    | Audit objective coverage before completion                                            |

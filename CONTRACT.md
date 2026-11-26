@@ -169,8 +169,8 @@ mission from "succeeding" by shrinking the contract.
 
 Soft budgets (`max_turns`, `max_writes`, `budget_usd`) are windows in campaign
 mode. On a soft stop, the harness extends them automatically if verified progress
-happened recently. `hard_budget_usd`, `max_wallclock_min`, `STOP`, `PAUSE`,
-`blocked`, `hard-budget` and `test-erosion` are absolute. Campaign defaults are
+happened recently. `hard_budget_usd`, `max_tokens`, `max_wallclock_min`, `STOP`, `PAUSE`,
+`blocked`, `hard-budget`, `token-budget` and `test-erosion` are absolute. Campaign defaults are
 40 turns/window, 8h wall-clock, $25 hard cap and 50 extensions.
 
 In `autonomy: relentless` / `never_give_up: true`, **all soft ceilings are

@@ -40,6 +40,7 @@ export function campaignSettings(plan) {
     max_wallclock_min: s.max_wallclock_min ?? 480,
     budget_usd: s.budget_usd ?? 5,
     hard_budget_usd: s.hard_budget_usd ?? 25,
+    max_tokens: s.max_tokens ?? 0,
     auto_extend: s.auto_extend ?? true,
     max_extensions: s.max_extensions ?? (relentless ? 0 : 50),
     extension_turns: s.extension_turns ?? 20,

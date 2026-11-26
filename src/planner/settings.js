@@ -19,6 +19,7 @@ export function normalizeSettings(raw = {}) {
       : clamp(s.max_turns, 4, 500, campaign ? 40 : 16),
     budget_usd: clamp(s.budget_usd, 0.1, 1000, 5),
     hard_budget_usd: clamp(s.hard_budget_usd, 0, 10000, campaign || relentless ? 25 : 0),
+    max_tokens: clamp(s.max_tokens, 0, 100_000_000, 0),
     auto_extend: campaign || relentless ? s.auto_extend !== false : s.auto_extend === true,
     max_extensions: clamp(s.max_extensions, 0, 100_000, relentless ? 0 : campaign ? 50 : 3),
     extension_turns: clamp(s.extension_turns, 1, 200, campaign ? 20 : 8),

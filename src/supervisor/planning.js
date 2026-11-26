@@ -20,6 +20,7 @@ export const planning = {
       `max_failures: ${s.max_failures}`,
       `max_wallclock_min: ${s.max_wallclock_min ?? 0}`,
       `hard_budget_usd: ${s.hard_budget_usd ?? 0}`,
+      `max_tokens: ${s.max_tokens ?? 0}`,
       `auto_extend: ${s.auto_extend ?? false}`,
       `max_extensions: ${s.max_extensions ?? 3}`,
       `extension_turns: ${s.extension_turns ?? 8}`,

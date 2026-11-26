@@ -24,6 +24,7 @@ import { wake } from "./supervisor/wake.js";
 import { failures } from "./supervisor/failures.js";
 import { verification } from "./supervisor/verification.js";
 import { reviews } from "./supervisor/reviews.js";
+import { parallel } from "./supervisor/parallel.js";
 
 export class Supervisor {
   constructor(ctx, options = {}) {
@@ -263,5 +264,6 @@ Object.assign(
   wake,
   failures,
   verification,
-  reviews
+  reviews,
+  parallel
 );

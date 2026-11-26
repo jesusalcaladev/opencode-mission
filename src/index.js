@@ -20,6 +20,7 @@ const str = { type: "string" };
 const HELP = [
   "/mission start <what to do>   Plan the objective, then run it autonomously with parallel workers",
   "/mission start <dir>          Start a pre-authored mission in an existing directory",
+  "/mission parallel A | B | C   Start up to 8 independent missions in parallel",
   "/mission status        Show state, checks and next task",
   "/mission research <q>  Research a question on the web, with images and sources",
   "/mission pause         Pause at the next idle boundary (remove PAUSE to resume)",
@@ -101,6 +102,10 @@ export default Plugin.define({
                 } else {
                   reply = `Missing objective.\n${HELP}`;
                 }
+                break;
+              }
+              case "parallel": {
+                reply = await supervisor.startParallel(sessionID, arg);
                 break;
               }
               case "research": {

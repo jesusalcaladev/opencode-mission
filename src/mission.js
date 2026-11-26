@@ -92,6 +92,7 @@ import {
   CAMPAIGN_EXTEND_TURNS,
   CAMPAIGN_EXTEND_WRITES,
 } from "./mission/chain.js";
+import { tokensFromContext, applyTokens, mergeTokenEntries } from "./mission/tokens.js";
 import { mutationSettings, mutationDecision } from "./mission/quality.js";
 import { normalizeLockPath, lockFiles, unlockFiles, lockedBy } from "./mission/locks.js";
 import { WAKE_FILE, WAKE_AGE_MS, needsWake } from "./mission/wake.js";
@@ -224,6 +225,9 @@ export {
   applyCost,
   generationCost,
   sessionIDsForMission,
+  tokensFromContext,
+  applyTokens,
+  mergeTokenEntries,
   mutationSettings,
   mutationDecision,
   normalizeLockPath,
