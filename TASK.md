@@ -61,7 +61,7 @@ hard caps absolutos, `this.d`, archivos <250 líneas, `npm run quality` verde).
 
 ## Fase 5 · Cierre y verificación
 
-- [x] 5.1 `npm run check`, `npm test`, `npm run quality` (coverage ~86.7/69.1/83.2) en verde: 205 tests + 12 evals end-to-end.
+- [x] 5.1 `npm run check`, `npm test`, `npm run quality` (coverage ~86.7/69.1/83.2) en verde: 214 tests + 12 evals end-to-end.
 - [x] 5.2 `ARCHITECTURE.md`, `CONTRACT.md`, `README.md`, `RUNBOOK.md`, `CHANGELOG.md` actualizados.
 - [x] 5.3 Smoke real: `test/smoke.test.js` corre `demos/cli` con checks ejecutables hasta `complete`.
 - [x] 5.4 Invariantes revisados. Módulos nuevos <250 líneas; `tui/model.js` (311) es deuda previa, `roles-pipeline`/`workers` bajaron respecto al baseline.
@@ -110,9 +110,16 @@ hard caps absolutos, `this.d`, archivos <250 líneas, `npm run quality` verde).
 - [x] 9.4 Eval `sandbox-copy`: un check que escribe `marker.txt` no toca el workspace real.
 - [x] 9.5 Tests unitarios de sandbox + docs (`README`, `RUNBOOK`, `CONTRACT`, `CHANGELOG`).
 
+## Fase 10 · Endurecimiento final de calidad
+
+- [x] 10.1 ESLint más estricto (unused vars/empty = error, 6 reglas nuevas) y deuda corregida.
+- [x] 10.2 Umbrales de cobertura subidos de 85/65/80 a 87/69/82.5.
+- [x] 10.3 Nuevos tests de ramas críticas: fallos de lead/worker, goal-audit, mejoras, EXTEND, handoff y ledger.
+- [x] 10.4 Bug corregido: `recordWorkerCost` actualizaba costo pero no tokens.
+
 ## Resultado de ejecución
 
-- 205 tests verdes; `npm run quality` exit 0; `npm run eval` 12/12 exit 0.
+- 214 tests verdes; `npm run quality` exit 0; `npm run eval` 12/12 exit 0.
 - Bug real corregido: `pruneJournalArchives` ordenaba por nombre (sufijo aleatorio) y podía borrar las líneas más nuevas bajo carga; ahora ordena por `mtime`.
 - `demos/cli` tenía un check vacuo (`node --test` sin archivos salía exit 0); ahora exige `contains:pass 3`, por lo que el baseline es rojo y la verificación es real.
 

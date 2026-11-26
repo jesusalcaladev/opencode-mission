@@ -84,6 +84,10 @@ export const cost = {
       fresh,
       this.missionCostTotal(fresh, this.generationCosts?.get(root) ?? 0)
     );
+    fresh.tokens = Math.max(
+      Number(fresh.tokens) || 0,
+      this.d.mergeTokenEntries(fresh.agent_runs ?? [])
+    );
     return usage.cost;
   },
 };

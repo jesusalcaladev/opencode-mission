@@ -65,7 +65,7 @@ test("planAndStart: a throwing model picker still produces a complete mission", 
     generate: async () => "not json",
   });
   sup.pickPlannerModel = async () => {
-    throw "model catalogue down";
+    throw new Error("model catalogue down");
   };
   try {
     const reply = await sup.planAndStart("ses_test", "create notes.txt containing hello");

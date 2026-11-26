@@ -41,8 +41,15 @@ All notable changes to this project are documented here. The format follows
 - Modularity refactor: main turn loop, telemetry, task splitting, TUI keymap and
   normalization extracted into focused modules; `src/mission.js` is now a barrel.
 
+### Changed
+
+- Stricter ESLint gate: unused vars/empty blocks are errors, plus `no-var`,
+  `eqeqeq`, `no-throw-literal`, `no-return-assign`, `no-useless-concat` and
+  `no-self-compare`. Coverage floors raised to 87/69/82.5.
+
 ### Fixed
 
+- `recordWorkerCost` now updates the durable token ledger as well as cost.
 - Worker cost was clobbered when a mission completed in the same turn: the
   cost snapshot is now refreshed after workers finish (covered by an eval).
 - Journal archives are pruned by modification time instead of filename, so a
