@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "summary": {
+    "total": 8,
+    "passed": 8,
+    "failed": 0,
+    "success_rate": 1,
+    "avg_turns": 1.5,
+    "avg_checks_green": 0.75,
+    "hard_stops": {
+      "max-turns": 3,
+      "all criteria green": 2,
+      "verified": 2,
+      "token-budget": 1
+    }
+  },
+  "cases": {
+    "baseline-vacuous": {
+      "pass": true
+    },
+    "blocked-relentless": {
+      "pass": true
+    },
+    "cli-standard": {
+      "pass": true
+    },
+    "parallel-queue": {
+      "pass": true
+    },
+    "review-high": {
+      "pass": true
+    },
+    "strict-checks": {
+      "pass": true
+    },
+    "token-budget": {
+      "pass": true
+    },
+    "wake-watchdog": {
+      "pass": true
+    }
+  }
+}

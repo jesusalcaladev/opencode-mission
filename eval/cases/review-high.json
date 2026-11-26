@@ -1,0 +1,35 @@
+{
+  "id": "review-high",
+  "mode": "mission",
+  "objective": "High review findings force rework before completion",
+  "criteria": [{ "id": "ok", "cmd": "node --version", "expect": "exit0", "timeout_ms": 5000 }],
+  "tasks": [
+    {
+      "id": 1,
+      "subject": "Ship the change",
+      "status": "completed",
+      "blocked_by": [],
+      "verify": "ok",
+      "files": ["a.js"]
+    }
+  ],
+  "settings": {
+    "autonomy": "standard",
+    "continuous_improvement": false,
+    "max_turns": 8,
+    "handoff_every_turns": 0,
+    "enableWorkers": false,
+    "enableRoles": true,
+    "stage": "review",
+    "check_baseline": { "ok": false },
+    "stage_reports": {
+      "review": { "text": "SEVERITY: high — unresolved blocker", "at": "2026-01-01T00:00:00Z" }
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "finish_reason": "all criteria green",
+    "review_attempts": 1,
+    "checks_green": 1
+  }
+}

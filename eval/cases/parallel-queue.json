@@ -1,0 +1,15 @@
+{
+  "id": "parallel-queue",
+  "mode": "queue",
+  "objective": "Queued missions respect parallelSlots",
+  "queue": [
+    { "objective": "Build alpha CLI", "priority": 5 },
+    { "objective": "Build beta CLI", "priority": 3 },
+    { "objective": "Write the docs", "priority": 1 }
+  ],
+  "options": { "parallelSlots": 2, "maxWorkers": 2 },
+  "expect": {
+    "running": 2,
+    "pending": 1
+  }
+}

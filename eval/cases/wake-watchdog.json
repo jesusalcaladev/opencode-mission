@@ -1,0 +1,32 @@
+{
+  "id": "wake-watchdog",
+  "mode": "wake",
+  "objective": "An external WAKE marker re-admits the lead",
+  "criteria": [{ "id": "done", "cmd": "test -f done.txt", "expect": "exit0", "timeout_ms": 5000 }],
+  "tasks": [
+    {
+      "id": 1,
+      "subject": "Create done.txt",
+      "status": "pending",
+      "blocked_by": [],
+      "verify": "done",
+      "files": ["done.txt"]
+    }
+  ],
+  "settings": {
+    "autonomy": "standard",
+    "continuous_improvement": false,
+    "max_turns": 6,
+    "handoff_every_turns": 0,
+    "enableWorkers": false,
+    "enableRoles": false,
+    "stage": "done"
+  },
+  "policy": { "wake": true },
+  "expect": {
+    "status": "running",
+    "prompt_contains": "[MISSION WAKE]",
+    "journal_contains": "external WAKE",
+    "wake_exists": false
+  }
+}

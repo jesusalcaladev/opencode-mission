@@ -1,0 +1,33 @@
+{
+  "id": "blocked-relentless",
+  "mode": "mission",
+  "objective": "A blocked verdict re-plans instead of ending the run",
+  "criteria": [{ "id": "done", "cmd": "test -f done.txt", "expect": "exit0", "timeout_ms": 5000 }],
+  "tasks": [
+    {
+      "id": 1,
+      "subject": "Create done.txt",
+      "status": "pending",
+      "blocked_by": [],
+      "verify": "done",
+      "files": ["done.txt"]
+    }
+  ],
+  "settings": {
+    "autonomy": "relentless",
+    "never_give_up": true,
+    "auto_extend": false,
+    "continuous_improvement": false,
+    "max_turns": 3,
+    "handoff_every_turns": 0,
+    "enableWorkers": false,
+    "enableRoles": false,
+    "stage": "done"
+  },
+  "policy": { "verdict": { "status": "blocked", "unblock": "try another approach" } },
+  "expect": {
+    "status": "aborted",
+    "finish_reason": "max-turns",
+    "journal_contains": "forced retry"
+  }
+}

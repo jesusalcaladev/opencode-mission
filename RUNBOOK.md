@@ -157,6 +157,19 @@ the **same workspace**, carrying `memory.md` forward. No human input needed.
 If a budget stop fires, create `EXTEND` to grant one more block of turns/writes
 (max `max_extensions` times). Without `EXTEND`, the stop is final.
 
+## Verify the harness itself
+
+```sh
+npm run eval
+npm run eval -- --filter blocked-relentless --json
+```
+
+The JSON reports per-case `pass`, `reasons`, terminal `status`, `finish_reason`,
+green checks, completed tasks, turns and stop reason. `eval/baseline.json` is the
+regression gate: any previously passing case that fails makes the command (and CI)
+fail. Update it deliberately with `npm run eval -- --update-baseline` only after
+an intentional behavior change.
+
 ## Watch it
 
 ```text

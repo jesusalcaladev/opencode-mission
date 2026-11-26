@@ -8,6 +8,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- End-to-end eval harness integrated with the real Supervisor: 8 deterministic
+  cases, `npm run eval`, baseline regression gate and CI step.
 - Budget forecast from durable telemetry (cost/tokens/minutes per turn) with
   projected hard-budget/token overrun flags in the TUI dashboard.
 - Persistent priority queue for parallel missions: `/mission queue add|list|run`,

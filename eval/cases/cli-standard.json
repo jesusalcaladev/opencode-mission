@@ -1,0 +1,26 @@
+{
+  "id": "cli-standard",
+  "mode": "mission",
+  "fixture": "demos/cli",
+  "settings": {
+    "autonomy": "standard",
+    "continuous_improvement": false,
+    "max_turns": 12,
+    "handoff_every_turns": 0,
+    "enableWorkers": false,
+    "enableRoles": false
+  },
+  "policy": {
+    "write": {
+      "cli.js": "#!/usr/bin/env node\nconst a = process.argv.slice(2);\nif (a[0] === '--version') { console.log('1.0.0'); process.exit(0); }\nconsole.log(String(Number(a[0]) + Number(a[1])));\n",
+      "cli.test.js": "const test = require('node:test');\nconst assert = require('node:assert/strict');\ntest('version', () => assert.equal('1.0.0', '1.0.0'));\ntest('sum', () => assert.equal(2 + 3, 5));\ntest('five', () => assert.equal(String(5), '5'));\n"
+    }
+  },
+  "expect": {
+    "status": "complete",
+    "finish_reason": "all criteria green",
+    "checks_green": 4,
+    "checks_total": 4,
+    "tasks_done": 3
+  }
+}

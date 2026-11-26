@@ -320,6 +320,8 @@ are aliases.
 npm install
 npm run check          # syntax check every source and test file
 npm test               # full suite, no network or TUI required
+npm run eval           # end-to-end eval cases through the real supervisor
+npm run eval -- --filter cli-standard --json
 node --test --watch test/*.test.js
 ```
 
@@ -328,6 +330,14 @@ The plugin has a server part (`@opencode/plugin`) and a TUI part (`./tui`,
 compact card in the sidebar (including a clear CTA on empty sessions). A fuller
 dashboard opens on demand as a session panel or full-screen route via
 `ctrl+shift+m`; there are no duplicate composer/footer HUDs.
+
+### Evaluation
+
+`eval/cases/*.json` defines end-to-end scenarios (standard completion, baseline
+vacuity, blocked → re-plan, review rework, token ceiling, strict checks, WAKE
+watchdog, parallel queue). `scripts/mission-eval.mjs` runs them through the real
+`Supervisor` with a deterministic fake OpenCode context — no network, no paid
+models, no writes outside temp dirs. `eval/baseline.json` gates regressions in CI.
 
 The dashboard shows progress, requirement coverage, checks, tasks, live agents,
 budget, a sparkline of verified progress and the journal tail. Pure rendering

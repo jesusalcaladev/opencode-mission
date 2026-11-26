@@ -1,0 +1,34 @@
+{
+  "id": "baseline-vacuous",
+  "mode": "mission",
+  "objective": "An already green check must not verify a task",
+  "criteria": [{ "id": "vac", "cmd": "true", "expect": "exit0", "timeout_ms": 5000 }],
+  "tasks": [
+    {
+      "id": 1,
+      "subject": "Do real work",
+      "status": "pending",
+      "blocked_by": [],
+      "verify": "vac",
+      "files": ["a.txt"]
+    }
+  ],
+  "settings": {
+    "autonomy": "standard",
+    "continuous_improvement": false,
+    "max_turns": 2,
+    "handoff_every_turns": 0,
+    "enableWorkers": false,
+    "enableRoles": false,
+    "stage": "done",
+    "strict_checks": false
+  },
+  "policy": { "write": { "a.txt": "work\n" } },
+  "expect": {
+    "status": "aborted",
+    "finish_reason": "max-turns",
+    "checks_green": 1,
+    "tasks_done": 0,
+    "tasks_pending": 1
+  }
+}

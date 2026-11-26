@@ -61,7 +61,7 @@ hard caps absolutos, `this.d`, archivos <250 líneas, `npm run quality` verde).
 
 ## Fase 5 · Cierre y verificación
 
-- [x] 5.1 `npm run check`, `npm test`, `npm run quality` (coverage ~86.7/69.1/83.2) en verde: 196 tests.
+- [x] 5.1 `npm run check`, `npm test`, `npm run quality` (coverage ~86.7/69.1/83.2) en verde: 199 tests + 8 evals end-to-end.
 - [x] 5.2 `ARCHITECTURE.md`, `CONTRACT.md`, `README.md`, `RUNBOOK.md`, `CHANGELOG.md` actualizados.
 - [x] 5.3 Smoke real: `test/smoke.test.js` corre `demos/cli` con checks ejecutables hasta `complete`.
 - [x] 5.4 Invariantes revisados. Módulos nuevos <250 líneas; `tui/model.js` (311) es deuda previa, `roles-pipeline`/`workers` bajaron respecto al baseline.
@@ -82,9 +82,20 @@ hard caps absolutos, `this.d`, archivos <250 líneas, `npm run quality` verde).
 - [x] 6.12 Predicción de presupuesto (`forecastBudget`) a partir de turnos/costo/tokens/historial.
 - [x] 6.13 Dashboard TUI: forecast, contador de tokens y vista de la cola persistente.
 
+## Fase 7 · Evals end-to-end integrados al motor
+
+- [x] 7.1 `src/mission/eval.js`: scoring puro con invariantes del arnés (nunca confía en `met`).
+- [x] 7.2 `scripts/mission-eval.mjs`: corre el `Supervisor` real con ctx falso determinista; sin red/modelos de pago.
+- [x] 7.3 8 casos en `eval/cases/`: estándar, baseline vacuo, blocked→replan, review-high, token-budget, strict-checks, WAKE y cola paralela.
+- [x] 7.4 `eval/baseline.json` con gate de regresión + `--update-baseline`, `--filter`, `--json`, `--out`.
+- [x] 7.5 `npm run eval` integrado en CI (`.github/workflows/ci.yml`).
+- [x] 7.6 Tests unitarios e integración de 2 casos reales bajo `node --test`.
+- [x] 7.7 Docs (`README`, `RUNBOOK`, `CHANGELOG`).
+- [x] 7.8 Arquitectura del runner separada: CLI (`mission-eval.mjs`, 67 líneas) + harness (`eval-harness.mjs`, 230).
+
 ## Resultado de ejecución
 
-- 196 tests verdes; `npm run quality` exit 0.
+- 199 tests verdes; `npm run quality` exit 0; `npm run eval` 8/8 exit 0.
 - Bug real corregido: `pruneJournalArchives` ordenaba por nombre (sufijo aleatorio) y podía borrar las líneas más nuevas bajo carga; ahora ordena por `mtime`.
 - `demos/cli` tenía un check vacuo (`node --test` sin archivos salía exit 0); ahora exige `contains:pass 3`, por lo que el baseline es rojo y la verificación es real.
 

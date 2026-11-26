@@ -94,6 +94,7 @@ import {
 } from "./mission/chain.js";
 import { tokensFromContext, applyTokens, mergeTokenEntries } from "./mission/tokens.js";
 import { forecastBudget } from "./mission/forecast.js";
+import { scoreCase, summarize } from "./mission/eval.js";
 import {
   QUEUE_FILE,
   enqueue as queueEnqueue,
@@ -241,6 +242,8 @@ export {
   applyTokens,
   mergeTokenEntries,
   forecastBudget,
+  scoreCase,
+  summarize,
   QUEUE_FILE,
   queueEnqueue,
   sortQueue,
