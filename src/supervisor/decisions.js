@@ -2,6 +2,27 @@
 // All dependencies are reached through this.d (set by the Supervisor).
 
 export const decisions = {
+  /// Single place that assembles decide() inputs. Keeping stop/pause files and
+  /// the baseline together prevents the three turn-time decision sites from
+  /// drifting apart.
+  async buildDecision(root, state, { results, tasks, verdict = null, criteria = null } = {}) {
+    const [stopFile, pauseFile, loaded] = await Promise.all([
+      this.d.stopRequested(root),
+      this.d.pauseRequested(root),
+      criteria ? Promise.resolve(null) : this.d.loadCriteria(root),
+    ]);
+    return this.d.decideNext({
+      state,
+      results,
+      tasks,
+      verdict,
+      stopFile,
+      pauseFile,
+      criteria: criteria ?? loaded,
+      baseline: state.check_baseline ?? {},
+    });
+  },
+
   taskAttemptLimit(state) {
     return this.d.attemptLimit(state);
   },

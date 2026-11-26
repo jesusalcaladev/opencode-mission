@@ -101,7 +101,8 @@ test("journal: concurrent appends survive repeated rotations without losing line
     assert.ok(kept.length > 0 && kept.length <= 120);
     assert.ok(kept.some((line) => line.includes("stress 119")));
     assert.ok(kept.some((line) => line.includes("stress 118")));
-    assert.match(await readJournal(root), /stress 119/);
+    // The newest line may live in an archive if rotation happened right after it.
+    assert.match(kept.join("\n"), /stress 119/);
     assert.ok(files.length <= 1 + JOURNAL_KEEP_ARCHIVES);
   } finally {
     if (previous === undefined) delete process.env.MISSION_JOURNAL_MAX_BYTES;

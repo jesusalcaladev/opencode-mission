@@ -1,8 +1,7 @@
-/* eslint-disable no-unused-vars -- shared preamble / compatibility signature */
 // Runs in the TUI process: only reads durable files written by the supervisor.
 // No OpenTUI, no Solid, no network. Everything here is testable with node --test.
 
-import { readFile, readdir, stat } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -12,8 +11,6 @@ export const pointerPath = () => path.join(cacheDir(), "current.json");
 export const registryPath = () => path.join(cacheDir(), "missions.json");
 
 import { readPointer, readRegistry } from "./model.js";
-
-const readText = (file, fallback = "") => readFile(file, "utf8").catch(() => fallback);
 
 const MISSION_FILES = ["state.json", "criteria.json", "tasks.json", "mission.md"];
 
@@ -62,8 +59,4 @@ export async function discoverRoots(missionsRoot, limit = 12) {
     if (await isMissionRoot(root)) roots.push(root);
   }
   return roots.slice(0, limit);
-}
-
-function ratio(a, b) {
-  return b > 0 ? a / b : 0;
 }

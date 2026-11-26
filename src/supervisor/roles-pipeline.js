@@ -1,4 +1,3 @@
-/* eslint-disable no-unused-vars -- shared preamble / compatibility signature */
 // rolesPipeline mixin — extracted from intelligence.js.
 // All dependencies are reached through this.d (set by the Supervisor).
 
@@ -77,7 +76,6 @@ export const rolesPipeline = {
   async runRolePipeline(sessionID, root, state, tasks, results, decision) {
     if (!this.enableRoles) return decision;
     const objective = this.d.objectiveOf(await this.readMission(root));
-    const criteria = await this.d.loadCriteria(root);
     const extended =
       state.autonomy === "campaign" ||
       state.goal_audit === true ||

@@ -62,20 +62,10 @@ export const turn = {
       let anyProgress = this.recordTurn(state, results, tasks);
       const verdict = state.last_verdict;
       state.last_verdict = null;
-      const stopFile = await this.d.stopRequested(root);
       let decision = await this.resolveStopDecision(
         root,
         state,
-        this.d.decideNext({
-          state,
-          results,
-          tasks,
-          verdict,
-          stopFile,
-          pauseFile: false,
-          criteria,
-          baseline: state.check_baseline ?? {},
-        })
+        await this.buildDecision(root, state, { results, tasks, verdict, criteria })
       );
 
       await this.journalTurn(root, state, results, tasks, decision);
@@ -100,16 +90,7 @@ export const turn = {
           state.metrics = this.d.recordMetric(state.metrics, "replans", 1);
           ({ results, tasks, baseline } = await this.verify(root, workRoot));
           state.check_baseline = baseline;
-          decision = this.d.decideNext({
-            state,
-            results,
-            tasks,
-            verdict: null,
-            stopFile: await this.d.stopRequested(root),
-            pauseFile: await this.d.pauseRequested(root),
-            criteria: await this.d.loadCriteria(root),
-            baseline: state.check_baseline ?? {},
-          });
+          decision = await this.buildDecision(root, state, { results, tasks });
           await this.journalTurn(root, state, results, tasks, decision, "after replan");
         }
       }
@@ -128,16 +109,7 @@ export const turn = {
           ({ results, tasks, baseline } = await this.verify(root, workRoot));
           state.check_baseline = baseline;
           anyProgress = this.recordTurn(state, results, tasks, false) || anyProgress;
-          decision = this.d.decideNext({
-            state,
-            results,
-            tasks,
-            verdict: null,
-            stopFile: await this.d.stopRequested(root),
-            pauseFile: await this.d.pauseRequested(root),
-            criteria: await this.d.loadCriteria(root),
-            baseline: state.check_baseline ?? {},
-          });
+          decision = await this.buildDecision(root, state, { results, tasks });
           await this.journalTurn(root, state, results, tasks, decision, "after workers");
         }
       }

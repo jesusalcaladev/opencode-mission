@@ -1,9 +1,8 @@
-/* eslint-disable no-unused-vars -- shared preamble / compatibility signature */
 // researchTools mixin — extracted from tools.js.
 // All dependencies are reached through this.d (set by the Supervisor).
 
 export const researchTools = {
-  researchAllowed(root) {
+  researchAllowed(_root) {
     // Research is opt-in: enabled by the plan, by a researcher role, or by options.
     return true;
   },

@@ -1,4 +1,3 @@
-/* eslint-disable no-unused-vars -- shared preamble / compatibility signature */
 // OpenCode plugin entrypoint: /mission commands, mission_* tools, and the two hooks
 // that make the supervisor autonomous (context injection + idle continuation).
 
@@ -8,14 +7,6 @@ import path from "node:path";
 import { Supervisor } from "./supervisor.js";
 import { duckDuckGoProvider, braveProvider, serperProvider, tavilyProvider } from "./research.js";
 import { toolDefinitions } from "./tool-definitions.js";
-
-const obj = (properties, required = []) => ({
-  type: "object",
-  properties,
-  required,
-  additionalProperties: false,
-});
-const str = { type: "string" };
 
 const HELP = [
   "/mission start <what to do>   Plan the objective, then run it autonomously with parallel workers",
@@ -114,10 +105,6 @@ export default Plugin.define({
                 const [action, ...queueArgs] = arg.split(/\s+/);
                 const priorityToken = queueArgs.find((t) => /^p:-?\d+$/.test(t));
                 const priority = priorityToken ? Number(priorityToken.slice(2)) : 0;
-                const objective = queueArgs
-                  .filter((t) => t !== priorityToken)
-                  .join(" ")
-                  .trim();
                 if (action === "list") {
                   const entries = await supervisor.loadQueue();
                   const stats = supervisor.d.queueStats(entries);

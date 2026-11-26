@@ -1,4 +1,3 @@
-/* eslint-disable no-unused-vars -- shared preamble / compatibility signature */
 // Durable mission memory: distill the append-only journal into a bounded,
 // stable brief that is regenerated from disk on every model request.
 // This is the cure for "the agent loses context after a few hours".
@@ -17,7 +16,12 @@ function stripStamp(line) {
   return line.replace(/^\[[^\]]+\]\s*/, "").trim();
 }
 
-export function distill({ journal = "", memory = "", summary = "", maxChars = MEMORY_BUDGET }) {
+export function distill({
+  journal = "",
+  memory = "",
+  summary: _summary = "",
+  maxChars = MEMORY_BUDGET,
+}) {
   const kept = [];
   const seen = new Set();
   for (const raw of memory.split(/\r?\n/)) {

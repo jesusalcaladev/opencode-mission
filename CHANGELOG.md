@@ -43,12 +43,20 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- Cleanup pass: removed 13 blanket lint suppressions and 31 dead constants/imports
+  that were hidden behind them; all `src/**` is lint-clean with no suppressions.
+- `buildDecision()` centralizes the three turn-time `decide()` call sites so
+  stop/pause/baseline inputs cannot drift apart.
+- Architecture checker also rejects lint suppressions, `console.log`, TODO/FIXME
+  and eval cases missing from the baseline.
 - Stricter ESLint gate: unused vars/empty blocks are errors, plus `no-var`,
   `eqeqeq`, `no-throw-literal`, `no-return-assign`, `no-useless-concat` and
   `no-self-compare`. Coverage floors raised to 87/69/82.5.
 
 ### Fixed
 
+- Flaky journal rotation test now looks for the newest line across all kept
+  files, not only the active journal.
 - `recordWorkerCost` now updates the durable token ledger as well as cost.
 - Worker cost was clobbered when a mission completed in the same turn: the
   cost snapshot is now refreshed after workers finish (covered by an eval).

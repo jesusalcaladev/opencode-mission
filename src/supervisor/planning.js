@@ -1,4 +1,3 @@
-/* eslint-disable no-unused-vars -- shared preamble / compatibility signature */
 // planning mixin — extracted from lifecycle.js.
 // All dependencies are reached through this.d (set by the Supervisor).
 
@@ -6,7 +5,7 @@ import * as d from "./deps.js";
 const { path, mkdir } = d;
 
 export const planning = {
-  async writePlanFiles(root, plan, original, force = false) {
+  async writePlanFiles(root, plan, original, _force = false) {
     const dir = path.join(root, ".mission");
     await mkdir(path.join(dir, "evidence"), { recursive: true });
     const s = plan.settings;

@@ -1,18 +1,10 @@
-/* eslint-disable no-unused-vars -- shared preamble / compatibility signature */
 // Research mode: web search, safe page fetch, image search/download/generation.
 // No third-party dependencies; all network access goes through fetch with hard
 // timeouts and an SSRF guard. Deterministic parsers are unit-testable.
 
-import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { mkdir, writeFile } from "node:fs/promises";
 
-const UA = "opencode-mission/0.3 (+research)";
-const MAX_PAGE_BYTES = 2 * 1024 * 1024;
-const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
-const DEFAULT_TIMEOUT = 15_000;
-const CACHE = new Map();
-const CACHE_TTL = 24 * 60 * 60 * 1000;
-const CACHE_LIMIT = 200;
 export function buildReport(question, { results = [], pages = [], images = [] } = {}) {
   const lines = [
     `# Research: ${String(question ?? "").trim()}`,

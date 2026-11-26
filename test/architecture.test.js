@@ -31,3 +31,15 @@ test("analyzeSources reports size, test globals, barrel imports and terminal wri
   assert.ok(violations.some((v) => v.includes("terminal status")));
   assert.ok(violations.some((v) => v.includes("mission_write")));
 });
+
+test("analyzeSources rejects suppressions, console output and TODO markers", () => {
+  const violations = analyzeSources([
+    { path: "/repo/src/a.js", content: "/* eslint-disable */\n" },
+    { path: "/repo/src/b.js", content: "console.log('debug');\n" },
+    { path: "/repo/src/c.js", content: "// TODO: fix later\n" },
+  ]);
+  assert.equal(violations.length, 3);
+  assert.ok(violations.some((v) => v.includes("lint suppressions")));
+  assert.ok(violations.some((v) => v.includes("journal")));
+  assert.ok(violations.some((v) => v.includes("TODO")));
+});

@@ -1,4 +1,3 @@
-/* eslint-disable no-unused-vars -- shared preamble / compatibility signature */
 // Task leases: the cure for "a worker dies and nobody picks up its task".
 // A task is claimed with a deadline, released on a structured report, and
 // reclaimed automatically when the lease expires. Attempts are bounded.
@@ -9,7 +8,7 @@ import { TASK_STATUS } from "./state.js";
 export const LEASE_MS = 5 * 60 * 1000;
 export const MAX_ATTEMPTS = 3;
 
-export function fromTasks(tasks, now = Date.now()) {
+export function fromTasks(tasks, _now = Date.now()) {
   return tasks.map((t, i) => ({
     id: Number(t.id) || i + 1,
     subject: t.subject ?? `Task ${i + 1}`,
@@ -87,7 +86,7 @@ export function release(progress, id, status = TASK_STATUS.COMPLETED) {
   return true;
 }
 
-export function fail(progress, id, error, now = Date.now(), maxAttempts = MAX_ATTEMPTS) {
+export function fail(progress, id, error, _now = Date.now(), maxAttempts = MAX_ATTEMPTS) {
   const p = progress.find((x) => x.id === id);
   if (!p) return false;
   p.attempts += 1;

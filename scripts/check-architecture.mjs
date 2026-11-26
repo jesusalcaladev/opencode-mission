@@ -18,6 +18,12 @@ export function analyzeSources(files = []) {
     }
     if (file.includes("/supervisor/") && /status\s*[:=]\s*["']complete["']/.test(content))
       violations.push(`${file}: only decide()/finish may produce a terminal status`);
+    if (/\beslint-disable\b/.test(content))
+      violations.push(`${file}: lint suppressions are not allowed; fix the code instead`);
+    if (/console\.(log|debug)\(/.test(content))
+      violations.push(`${file}: use the journal instead of console output`);
+    if (/\b(?:TODO|FIXME)\b/.test(content))
+      violations.push(`${file}: unresolved TODO/FIXME marker`);
   }
   const writeTool = files.find((f) => f.path.endsWith("/supervisor/tools.js"));
   if (writeTool && !writeTool.content.includes(".mission/"))
@@ -47,6 +53,14 @@ async function main() {
   if (!pkg.scripts?.eval) violations.push("package.json: missing npm run eval");
   const ci = await readFile(path.join(root, ".github/workflows/ci.yml"), "utf8").catch(() => "");
   if (!ci.includes("npm run eval")) violations.push("CI: npm run eval is not wired");
+  const baseline = JSON.parse(await readFile(path.join(root, "eval", "baseline.json"), "utf8"));
+  const caseNames = (await readdir(path.join(root, "eval", "cases"))).filter((n) =>
+    n.endsWith(".json")
+  );
+  for (const name of caseNames) {
+    const id = JSON.parse(await readFile(path.join(root, "eval", "cases", name), "utf8")).id;
+    if (!baseline.cases?.[id]) violations.push(`eval baseline missing case ${id}`);
+  }
 
   if (violations.length) {
     process.stderr.write(
