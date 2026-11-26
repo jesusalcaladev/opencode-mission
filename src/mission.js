@@ -96,6 +96,11 @@ import { mutationSettings, mutationDecision } from "./mission/quality.js";
 import { normalizeLockPath, lockFiles, unlockFiles, lockedBy } from "./mission/locks.js";
 import { WAKE_FILE, WAKE_AGE_MS, needsWake } from "./mission/wake.js";
 import {
+  GLOBAL_MEMORY_FILE,
+  GLOBAL_MEMORY_BUDGET,
+  mergeGlobalMemory,
+} from "./mission/global-memory.js";
+import {
   costFromContext,
   mergeCosts,
   applyCost,
@@ -228,6 +233,9 @@ export {
   WAKE_FILE,
   WAKE_AGE_MS,
   needsWake,
+  GLOBAL_MEMORY_FILE,
+  GLOBAL_MEMORY_BUDGET,
+  mergeGlobalMemory,
 };
 
 export * from "./mission/persistence.js";

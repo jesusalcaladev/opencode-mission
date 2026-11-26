@@ -14,6 +14,13 @@ export const intelligence = {
     if (brief) event.system.push({ type: "text", text: brief });
   },
 
+  globalMemoryPath(root) {
+    return this.d.path.join(
+      this.missionsRoot ?? this.d.path.dirname(root),
+      this.d.GLOBAL_MEMORY_FILE
+    );
+  },
+
   async refreshBrief(sessionID, root, results) {
     const [
       missionText,
@@ -38,6 +45,10 @@ export const intelligence = {
       this.d.loadCriteria(root),
       this.d.readFile(this.d.path.join(root, "research", "report.md"), "utf8").catch(() => ""),
     ]);
+    const globalMemory = await this.d.readFile(this.globalMemoryPath(root), "utf8").catch(() => "");
+    const fullInstructions = globalMemory
+      ? `${instructions}\n\n## Cross-mission memory\n${globalMemory}`
+      : instructions;
     this.briefs.set(
       sessionID,
       this.d.buildBrief({
@@ -49,7 +60,7 @@ export const intelligence = {
         memory,
         summary,
         progress,
-        instructions,
+        instructions: fullInstructions,
         facts: state.facts ?? [],
         results,
         requirements: criteria.requirements ?? [],
@@ -91,6 +102,14 @@ export const intelligence = {
       this.d.saveMemory(root, distilled.memory),
       this.d.saveSummary(root, distilled.summary),
     ]);
+    if (state.global_memory === true) {
+      const globalPath = this.globalMemoryPath(root);
+      const existing = await this.d.readFile(globalPath, "utf8").catch(() => "");
+      await this.d.writeTextAtomic(
+        globalPath,
+        this.d.mergeGlobalMemory(existing, [distilled.memory, distilled.summary])
+      );
+    }
     await this.journal(
       root,
       `memory compacted: ${distilled.memory.split("\n").length} durable entries`

@@ -233,36 +233,37 @@ are aliases.
 
 ### Mission frontmatter (`.mission/mission.md`)
 
-| Key                      | Default    | Meaning                                                                             |
-| ------------------------ | ---------- | ----------------------------------------------------------------------------------- |
-| `max_turns`              | `16`       | Turn ceiling                                                                        |
-| `budget_usd`             | `5`        | Cost ceiling (when the provider reports cost)                                       |
-| `max_wallclock_min`      | `0`        | Wall-clock ceiling (0 = off)                                                        |
-| `lease_ms`               | `300000`   | Worker lease duration; renew with `mission_heartbeat`                               |
-| `max_extensions`         | `3`        | How many times the `EXTEND` file may raise the budgets                              |
-| `continuous_improvement` | `true`     | Audit/improve after the objective is met                                            |
-| `max_improve_cycles`     | `5`        | Bounded improvement cycles                                                          |
-| `min_impact`             | `medium`   | Minimum finding impact worth implementing                                           |
-| `max_writes`             | `0`        | Successful file writes before aborting (0 = off)                                    |
-| `max_failures`           | `3`        | Failed turns before aborting                                                        |
-| `handoff_every_turns`    | `4`        | Rotate to a fresh session (0 = off)                                                 |
-| `isolation`              | `none`     | `worktree` runs in a sibling git worktree                                           |
-| `stall_after_turns`      | `2`        | Strategy-escalation threshold                                                       |
-| `autonomy`               | `standard` | `standard`, `campaign` or `relentless`                                              |
-| `never_give_up`          | `false`    | Unlimited soft effort ceilings; hard caps still apply                               |
-| `max_task_attempts`      | `3`        | Per-task retries (`0` = unlimited)                                                  |
-| `max_review_attempts`    | `2`        | Review rework rounds (`0` = unlimited)                                              |
-| `mutation_checks`        | `false`    | Reject checks that stay green without the owned files                               |
-| `require_e2e`            | `false`    | Require an e2e/smoke check (default in relentless)                                  |
-| `strict_checks`          | `false`    | Refuse unsafe/vacuous criteria commands from **any** source (default in relentless) |
-| `auto_extend`            | `false`    | Extend soft budgets while progress is verified                                      |
-| `hard_budget_usd`        | `0`        | Absolute cost cap that extensions never cross                                       |
-| `extension_turns`        | `8`        | Turns granted per extension                                                         |
-| `extension_writes`       | `50`       | Writes granted per extension                                                        |
-| `goal_audit`             | `false`    | Audit objective coverage before completion                                          |
-| `max_goal_audits`        | `3`        | Rounds of goal-gap repair                                                           |
-| `worker_timeout_ms`      | `1800000`  | Max lifetime of a worker without heartbeat                                          |
-| `needs_research`         | `false`    | Dispatch a researcher alongside the investigator                                    |
+| Key                      | Default    | Meaning                                                                               |
+| ------------------------ | ---------- | ------------------------------------------------------------------------------------- |
+| `max_turns`              | `16`       | Turn ceiling                                                                          |
+| `budget_usd`             | `5`        | Cost ceiling (when the provider reports cost)                                         |
+| `max_wallclock_min`      | `0`        | Wall-clock ceiling (0 = off)                                                          |
+| `lease_ms`               | `300000`   | Worker lease duration; renew with `mission_heartbeat`                                 |
+| `max_extensions`         | `3`        | How many times the `EXTEND` file may raise the budgets                                |
+| `continuous_improvement` | `true`     | Audit/improve after the objective is met                                              |
+| `max_improve_cycles`     | `5`        | Bounded improvement cycles                                                            |
+| `min_impact`             | `medium`   | Minimum finding impact worth implementing                                             |
+| `max_writes`             | `0`        | Successful file writes before aborting (0 = off)                                      |
+| `max_failures`           | `3`        | Failed turns before aborting                                                          |
+| `handoff_every_turns`    | `4`        | Rotate to a fresh session (0 = off)                                                   |
+| `isolation`              | `none`     | `worktree` runs in a sibling git worktree                                             |
+| `stall_after_turns`      | `2`        | Strategy-escalation threshold                                                         |
+| `autonomy`               | `standard` | `standard`, `campaign` or `relentless`                                                |
+| `never_give_up`          | `false`    | Unlimited soft effort ceilings; hard caps still apply                                 |
+| `max_task_attempts`      | `3`        | Per-task retries (`0` = unlimited)                                                    |
+| `max_review_attempts`    | `2`        | Review rework rounds (`0` = unlimited)                                                |
+| `mutation_checks`        | `false`    | Reject checks that stay green without the owned files                                 |
+| `require_e2e`            | `false`    | Require an e2e/smoke check (default in relentless)                                    |
+| `strict_checks`          | `false`    | Refuse unsafe/vacuous criteria commands from **any** source (default in relentless)   |
+| `global_memory`          | `false`    | Share distilled decisions across missions under the same root (default in relentless) |
+| `auto_extend`            | `false`    | Extend soft budgets while progress is verified                                        |
+| `hard_budget_usd`        | `0`        | Absolute cost cap that extensions never cross                                         |
+| `extension_turns`        | `8`        | Turns granted per extension                                                           |
+| `extension_writes`       | `50`       | Writes granted per extension                                                          |
+| `goal_audit`             | `false`    | Audit objective coverage before completion                                            |
+| `max_goal_audits`        | `3`        | Rounds of goal-gap repair                                                             |
+| `worker_timeout_ms`      | `1800000`  | Max lifetime of a worker without heartbeat                                            |
+| `needs_research`         | `false`    | Dispatch a researcher alongside the investigator                                      |
 
 ## Mission files
 

@@ -126,6 +126,7 @@ export const initialState = () => ({
   max_review_attempts: DEFAULT_MAX_REVIEW_ATTEMPTS,
   mutation_checks: false,
   strict_checks: false,
+  global_memory: false,
   model_rotation: [],
   check_baseline: {},
   cost_extra_usd: 0,

@@ -61,6 +61,7 @@ auto_extend: true
 mutation_checks: true
 require_e2e: true
 strict_checks: true # refuses sudo/rm -rf/vacuous commands even in pre-authored criteria
+global_memory: true # distilled decisions flow to the next mission
 hard_budget_usd: 25 # absolute
 max_wallclock_min: 480 # absolute (8h)
 ```

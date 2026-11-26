@@ -61,7 +61,7 @@ hard caps absolutos, `this.d`, archivos <250 líneas, `npm run quality` verde).
 
 ## Fase 5 · Cierre y verificación
 
-- [x] 5.1 `npm run check`, `npm test`, `npm run quality` (coverage ~86.7/69.1/83.2) en verde: 185 tests.
+- [x] 5.1 `npm run check`, `npm test`, `npm run quality` (coverage ~86.7/69.1/83.2) en verde: 187 tests.
 - [x] 5.2 `ARCHITECTURE.md`, `CONTRACT.md`, `README.md`, `RUNBOOK.md`, `CHANGELOG.md` actualizados.
 - [x] 5.3 Smoke real: `test/smoke.test.js` corre `demos/cli` con checks ejecutables hasta `complete`.
 - [x] 5.4 Invariantes revisados. Módulos nuevos <250 líneas; `tui/model.js` (311) es deuda previa, `roles-pipeline`/`workers` bajaron respecto al baseline.
@@ -71,10 +71,12 @@ hard caps absolutos, `this.d`, archivos <250 líneas, `npm run quality` verde).
 - [x] 6.1 `strict_checks`: rechaza comandos inseguros/vacuos **antes de ejecutarlos**, también en criterios pre-autorizados (default en relentless).
 - [x] 6.2 Rotación de modelo entre **todos** los modelos libres con tools, con historial durable `model_rotation` y wrap-around.
 - [x] 6.3 Tests destrict/rotación + documentación (`README`, `RUNBOOK`, `CONTRACT`).
+- [x] 6.4 Memoria global entre misiones (`GLOBAL_MEMORY.md`, acotada y deduplicada) inyectada en el brief.
+- [x] 6.5 Tests de memoria global.
 
 ## Resultado de ejecución
 
-- 185 tests verdes; `npm run quality` exit 0.
+- 187 tests verdes; `npm run quality` exit 0.
 - Bug real corregido: `pruneJournalArchives` ordenaba por nombre (sufijo aleatorio) y podía borrar las líneas más nuevas bajo carga; ahora ordena por `mtime`.
 - `demos/cli` tenía un check vacuo (`node --test` sin archivos salía exit 0); ahora exige `contains:pass 3`, por lo que el baseline es rojo y la verificación es real.
 

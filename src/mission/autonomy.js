@@ -50,6 +50,7 @@ export function campaignSettings(plan) {
     max_task_attempts: s.max_task_attempts ?? (relentless ? 0 : 3),
     max_review_attempts: s.max_review_attempts ?? (relentless ? 0 : 2),
     strict_checks: s.strict_checks ?? relentless,
+    global_memory: s.global_memory ?? relentless,
     handoff_every_turns: s.handoff_every_turns ?? 8,
     lease_ms: s.lease_ms ?? 600000,
     worker_timeout_ms: s.worker_timeout_ms ?? 1800000,

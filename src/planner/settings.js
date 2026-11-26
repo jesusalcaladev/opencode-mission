@@ -31,6 +31,7 @@ export function normalizeSettings(raw = {}) {
     mutation_checks: s.mutation_checks === true || (relentless && s.mutation_checks !== false),
     require_e2e: s.require_e2e === true || (relentless && s.require_e2e !== false),
     strict_checks: s.strict_checks === true || (relentless && s.strict_checks !== false),
+    global_memory: s.global_memory === true || (relentless && s.global_memory !== false),
     continuous_improvement: s.continuous_improvement !== false,
     max_improve_cycles: clamp(s.max_improve_cycles, 0, 100_000, relentless ? 0 : campaign ? 20 : 5),
     min_impact: ["low", "medium", "high"].includes(s.min_impact) ? s.min_impact : "medium",
