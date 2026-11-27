@@ -32,3 +32,7 @@ export * from "./mission/host-restart.js";
 export * from "./mission/context-pack.js";
 export * from "./mission/schema.js";
 export * from "./mission/progress.js";
+export * from "./mission/sizing.js";
+export * from "./mission/deployment.js";
+export * from "./mission/discovery.js";
+export * from "./mission/report.js";

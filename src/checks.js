@@ -3,24 +3,15 @@
 
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cp, mkdir, mkdtemp, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, rm, stat, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { missionDir, FILES } from "./mission.js";
 import { sandboxMode, sanitizeEnv, isSandboxedPath } from "./mission/sandbox.js";
 import { safeCheckCmd } from "./planner/prompt.js";
+import { listStampFiles, statFiles } from "./mission/stamp.js";
 
 const MAX_OUTPUT = 64 * 1024;
-const SKIP = new Set([
-  ".git",
-  ".mission",
-  "node_modules",
-  "zig-cache",
-  ".zig-cache",
-  "zig-out",
-  "dist",
-  "build",
-]);
 
 export function evaluateExpect(expect, { code, stdout }) {
   const spec = String(expect ?? "exit0");
@@ -67,32 +58,36 @@ export function runCommand(cmd, cwd, timeoutMs, env) {
 /// Used to skip criteria that cannot have changed since the last verified run.
 export async function workspaceStamp(root) {
   const hash = createHash("sha256");
-  let entries = [];
-  try {
-    entries = await readdir(root, { recursive: true, withFileTypes: true });
-  } catch {
-    return "missing";
-  }
-  const files = entries
-    .filter((e) => e.isFile() && !e.name.split(path.sep).some((part) => SKIP.has(part)))
-    .map((e) => path.join(e.parentPath ?? root, e.name));
-  files.sort();
-  for (const file of files.slice(0, 20_000)) {
-    try {
-      const info = await stat(file);
-      hash.update(path.relative(root, file));
-      hash.update(String(info.mtimeMs));
-      hash.update(String(info.size));
-    } catch {
-      // A file deleted during the scan is a change; the next stamp will differ.
-    }
+  const isDir = await stat(root)
+    .then((info) => info.isDirectory())
+    .catch(() => false);
+  if (!isDir) return "missing";
+  const files = await listStampFiles(root);
+  // A file deleted during the scan is a change; the next stamp will differ.
+  for (const { file, info } of await statFiles(files)) {
+    hash.update(path.relative(root, file));
+    hash.update(String(info.mtimeMs));
+    hash.update(String(info.size));
   }
   return hash.digest("hex");
 }
 
-export function criteriaSignature(checks) {
+export function criteriaSignature(checks, options = {}) {
   return createHash("sha256")
-    .update(JSON.stringify((checks ?? []).map((c) => [c.id, c.cmd, c.expect, c.timeout_ms])))
+    .update(
+      JSON.stringify([
+        (checks ?? []).map((c) => [
+          c.id,
+          c.cmd,
+          c.expect,
+          c.timeout_ms,
+          c.retries ?? 0,
+          c.kind ?? "",
+        ]),
+        options.strict === true,
+        options.sandbox ?? "none",
+      ])
+    )
     .digest("hex");
 }
 
@@ -125,7 +120,7 @@ export async function runChecks(root, criteria, options = {}) {
   await mkdir(evidenceDir, { recursive: true });
 
   const stamp = options.stamp ?? (await workspaceStamp(root));
-  const signature = criteriaSignature(checks);
+  const signature = criteriaSignature(checks, options);
   const cache = options.cache;
   if (
     cache &&

@@ -70,6 +70,9 @@ export const initialState = () => ({
   stall_after_turns: DEFAULT_STALL_AFTER_TURNS,
   best_green: 0,
   progress_pct: 0,
+  sizing: null,
+  require_deploy: false,
+  deploy: null,
   last_progress_turn: 0,
   strategy_tier: 1,
   stall_turns: 0,
@@ -116,6 +119,7 @@ export const initialState = () => ({
   handoffs: [],
   metrics: {},
   last_checks_at: 0,
+  last_write_at: 0,
   phase: "implement",
   paused: false,
   goal_audit: false,
@@ -134,6 +138,13 @@ export const initialState = () => ({
   model_rotation: [],
   check_baseline: {},
   cost_extra_usd: 0,
+  // Discovery phase: recon reports on disk, the architect blueprint and the
+  // report written at the end. Persisted so a resume reuses the work.
+  discovery_done: false,
+  recon_agents: 0,
+  blueprint: "",
+  report_path: "",
+  deps_baseline: null,
 });
 
 export function parseFrontmatter(text) {
@@ -168,7 +179,12 @@ export function normalizeTask(task, index = 0) {
   const status = ["pending", "in_progress", "completed", "failed"].includes(task?.status)
     ? task.status
     : TASK_STATUS.PENDING;
+  // Keep every extra field (`stage`, `milestone`, `attempts`, cost hints, task
+  // timing). loadTasks/saveTasks round-trip through this function on every turn,
+  // so dropping them used to erase the stage labels the planner produced and the
+  // TUI renders — the task list silently lost its structure after one save.
   return {
+    ...(task && typeof task === "object" ? task : {}),
     id: Number.isFinite(Number(task?.id)) && Number(task.id) > 0 ? Number(task.id) : index + 1,
     subject: String(task?.subject ?? `Task ${index + 1}`).slice(0, 160),
     status,

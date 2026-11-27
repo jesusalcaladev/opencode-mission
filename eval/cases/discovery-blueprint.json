@@ -1,0 +1,184 @@
+{
+  "id": "discovery-blueprint",
+  "mode": "discovery",
+  "objective": "Build the widget engine",
+  "reconAgents": 2,
+  "recon": {
+    "architecture": "FILES: src/index.js:1 — entry point\nCONSTRAINTS: keep the public API stable",
+    "quality": "CURRENT BEHAVIOR: node --test runs the suite\nRISKS: no e2e check exists yet"
+  },
+  "blueprint": {
+    "objective": "Build the widget engine",
+    "definition_of_done": ["the engine builds and runs"],
+    "checks": [
+      {
+        "id": "toolchain",
+        "cmd": "node --version",
+        "expect": "exit0",
+        "timeout_ms": 5000,
+        "kind": "build"
+      },
+      {
+        "id": "unit",
+        "cmd": "node -e \"process.exit(0)\"",
+        "expect": "exit0",
+        "timeout_ms": 5000,
+        "kind": "unit"
+      },
+      {
+        "id": "e2e",
+        "cmd": "node -e \"process.exit(0)\"",
+        "expect": "exit0",
+        "timeout_ms": 5000,
+        "kind": "e2e"
+      },
+      {
+        "id": "smoke",
+        "cmd": "node -e \"process.exit(0)\"",
+        "expect": "exit0",
+        "timeout_ms": 5000,
+        "kind": "smoke"
+      }
+    ],
+    "tasks": [
+      {
+        "id": 1,
+        "subject": "Implement unit 1",
+        "files": ["src/unit-1.js"],
+        "verify": "toolchain",
+        "blocked_by": [],
+        "milestone": "foundation",
+        "stage": "foundation"
+      },
+      {
+        "id": 2,
+        "subject": "Implement unit 2",
+        "files": ["src/unit-2.js"],
+        "verify": "unit",
+        "blocked_by": [],
+        "milestone": "foundation",
+        "stage": "foundation"
+      },
+      {
+        "id": 3,
+        "subject": "Implement unit 3",
+        "files": ["src/unit-3.js"],
+        "verify": "e2e",
+        "blocked_by": [],
+        "milestone": "foundation",
+        "stage": "foundation"
+      },
+      {
+        "id": 4,
+        "subject": "Implement unit 4",
+        "files": ["src/unit-4.js"],
+        "verify": "smoke",
+        "blocked_by": [],
+        "milestone": "foundation",
+        "stage": "foundation"
+      },
+      {
+        "id": 5,
+        "subject": "Implement unit 5",
+        "files": ["src/unit-5.js"],
+        "verify": "toolchain",
+        "blocked_by": [],
+        "milestone": "build",
+        "stage": "build"
+      },
+      {
+        "id": 6,
+        "subject": "Implement unit 6",
+        "files": ["src/unit-6.js"],
+        "verify": "unit",
+        "blocked_by": [],
+        "milestone": "build",
+        "stage": "build"
+      },
+      {
+        "id": 7,
+        "subject": "Implement unit 7",
+        "files": ["src/unit-7.js"],
+        "verify": "e2e",
+        "blocked_by": [],
+        "milestone": "build",
+        "stage": "build"
+      },
+      {
+        "id": 8,
+        "subject": "Implement unit 8",
+        "files": ["src/unit-8.js"],
+        "verify": "smoke",
+        "blocked_by": [],
+        "milestone": "build",
+        "stage": "build"
+      },
+      {
+        "id": 9,
+        "subject": "Implement unit 9",
+        "files": ["src/unit-9.js"],
+        "verify": "toolchain",
+        "blocked_by": [],
+        "milestone": "build",
+        "stage": "build"
+      },
+      {
+        "id": 10,
+        "subject": "Implement unit 10",
+        "files": ["src/unit-10.js"],
+        "verify": "unit",
+        "blocked_by": [],
+        "milestone": "build",
+        "stage": "build"
+      },
+      {
+        "id": 11,
+        "subject": "Implement unit 11",
+        "files": ["src/unit-11.js"],
+        "verify": "e2e",
+        "blocked_by": [],
+        "milestone": "build",
+        "stage": "build"
+      },
+      {
+        "id": 12,
+        "subject": "Implement unit 12",
+        "files": ["src/unit-12.js"],
+        "verify": "smoke",
+        "blocked_by": [],
+        "milestone": "build",
+        "stage": "build"
+      },
+      {
+        "id": 13,
+        "subject": "Implement unit 13",
+        "files": ["src/unit-13.js"],
+        "verify": "toolchain",
+        "blocked_by": [],
+        "milestone": "build",
+        "stage": "build"
+      },
+      {
+        "id": 14,
+        "subject": "Implement unit 14",
+        "files": ["src/unit-14.js"],
+        "verify": "unit",
+        "blocked_by": [],
+        "milestone": "build",
+        "stage": "build"
+      }
+    ],
+    "requirements": [{ "id": "req-1", "text": "the engine runs", "checks": ["e2e"] }],
+    "milestones": [{ "id": "foundation", "title": "Foundation" }],
+    "settings": { "autonomy": "campaign" }
+  },
+  "expect": {
+    "status": "discovery",
+    "checks_total": 4,
+    "min_tasks": 14,
+    "discovery_done": true,
+    "goal_audit": true,
+    "recon_agents": 2,
+    "journal_contains": "Plan source: blueprint"
+  }
+}

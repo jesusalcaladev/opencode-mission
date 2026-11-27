@@ -79,8 +79,9 @@ test("createPlan retries after a malformed answer and falls back when the model 
   const bad = await createPlan("objective", "/tmp/ws", async () => {
     throw new Error("quota");
   });
-  assert.equal(bad.source, "fallback");
-  assert.deepEqual(bad.plan, fallbackPlan("objective", "/tmp/ws"));
+  assert.equal(bad.source, "no-criteria");
+  assert.equal(bad.plan.unstartable, true);
+  assert.deepEqual(bad.plan.checks, []);
 });
 
 test("fallbackPlan derives real checks from the objective (no vacuous node --test)", () => {

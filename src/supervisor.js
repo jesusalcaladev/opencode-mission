@@ -9,6 +9,7 @@ import { recovery } from "./supervisor/recovery.js";
 import { models } from "./supervisor/models.js";
 import { lifecycle } from "./supervisor/lifecycle.js";
 import { planning } from "./supervisor/planning.js";
+import { workspaces } from "./supervisor/workspaces.js";
 import { intelligence } from "./supervisor/intelligence.js";
 import { rolesPipeline } from "./supervisor/roles-pipeline.js";
 import { goalAudit } from "./supervisor/goal-audit.js";
@@ -27,6 +28,9 @@ import { reviews } from "./supervisor/reviews.js";
 import { parallel } from "./supervisor/parallel.js";
 import { queueManager } from "./supervisor/queue-manager.js";
 import { supervisorContext } from "./supervisor/context.js";
+import { discovery } from "./supervisor/discovery.js";
+import { missionReport } from "./supervisor/report.js";
+import { planFiles } from "./supervisor/plan-files.js";
 
 export class Supervisor {
   constructor(ctx, options = {}) {
@@ -35,6 +39,7 @@ export class Supervisor {
     this.options = options;
     this.bySession = new Map();
     this.byRoot = new Map();
+    this.boundDirectory = new Map();
     this.registry = [];
     this.busy = new Set();
     this.workers = new Map();
@@ -50,9 +55,16 @@ export class Supervisor {
     this.controller = new AbortController();
     this.maxWorkers = Math.max(1, Number(options.maxWorkers) || 3);
     this.missionsRoot = options.missionsRoot ? this.d.path.resolve(options.missionsRoot) : null;
+    this.workspaceMode = options.workspaceMode === "sandbox" ? "sandbox" : "project";
+    this.currentDirectory = this.d.path.resolve(ctx.location?.directory ?? process.cwd());
     this.enableWorkers = options.enableWorkers !== false;
     this.enableChaining = options.enableChaining !== false;
     this.enableRoles = options.enableRoles !== false;
+    // Opt-in: make every mission unattended by default instead of requiring
+    // `/mission start --long`. The per-command flag still wins.
+    this.defaultAutonomy = ["relentless", "campaign"].includes(options.defaultAutonomy)
+      ? options.defaultAutonomy
+      : null;
   }
 }
 
@@ -68,6 +80,7 @@ Object.assign(
   models,
   lifecycle,
   planning,
+  workspaces,
   intelligence,
   rolesPipeline,
   goalAudit,
@@ -86,6 +99,9 @@ Object.assign(
   parallel,
   queueManager,
   supervisorContext,
+  discovery,
+  missionReport,
+  planFiles,
   turn,
   telemetry,
   taskSplitting

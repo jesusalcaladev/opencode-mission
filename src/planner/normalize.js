@@ -2,6 +2,10 @@
 import { SAFE_ID, DENY_CMD, VACUOUS_CMD } from "./prompt.js";
 import { normalizeSettings } from "./settings.js";
 import { expandTaskList } from "./tasks.js";
+import { missionSizing } from "../mission/sizing.js";
+import { ensureDeployCheck, repairChecks, repairTasks } from "./repair.js";
+import { validateMonotonic } from "./monotonic.js";
+export { validateMonotonic };
 
 function parseJson(text) {
   const raw = String(text ?? "").trim();
@@ -35,17 +39,24 @@ function safeFiles(value) {
   return out.slice(0, 20);
 }
 
-export function normalizePlan(raw, objective, workspace) {
+export function normalizePlan(raw, objective, workspace, opts = {}) {
   const data = raw && typeof raw === "object" ? raw : parseJson(raw);
   const errors = [];
   if (!data || typeof data !== "object")
     return { ok: false, errors: ["model returned no JSON object"] };
   const settings = normalizeSettings(data.settings);
-  const campaign = settings.autonomy === "campaign";
+  const proposals = opts.proposals ?? {};
+  const sizing =
+    opts.sizing ??
+    missionSizing({
+      objective,
+      options: opts.options ?? {},
+      proposals: { checks: proposals.checks, tasks: proposals.tasks },
+    });
 
-  const checks = [];
-  if (!Array.isArray(data.checks) || data.checks.length === 0 || data.checks.length > 24) {
-    errors.push("checks must be an array of 1..24 items");
+  let checks = [];
+  if (!Array.isArray(data.checks) || data.checks.length === 0 || data.checks.length > 30) {
+    errors.push("checks must be an array of 1..30 items");
   } else {
     for (const c of data.checks) {
       if (!c || typeof c !== "object") continue;
@@ -78,14 +89,18 @@ export function normalizePlan(raw, objective, workspace) {
     }
   }
 
+  if (settings.require_e2e || sizing.big) checks = ensureDeployCheck(checks, proposals);
+  if (sizing.big) checks = repairChecks(checks, { proposals, minChecks: sizing.minChecks });
+  checks = checks.slice(0, 30);
   const checkIds = new Set(checks.map((c) => c.id));
+
   let tasks = [];
-  if (!Array.isArray(data.tasks) || data.tasks.length === 0 || data.tasks.length > 60) {
-    errors.push("tasks must be an array of 1..60 items");
+  if (!Array.isArray(data.tasks) || data.tasks.length === 0 || data.tasks.length > 120) {
+    errors.push("tasks must be an array of 1..120 items");
   } else {
     data.tasks.forEach((item, index) => {
       if (!item || typeof item !== "object") return;
-      const id = clamp(item.id, 1, 60, index + 1);
+      const id = clamp(item.id, 1, 120, index + 1);
       const subject = typeof item.subject === "string" ? item.subject.trim().slice(0, 160) : "";
       if (subject.length < 3) {
         errors.push(`task ${id} has no usable subject`);
@@ -93,7 +108,10 @@ export function normalizePlan(raw, objective, workspace) {
       }
       const verify =
         typeof item.verify === "string" && checkIds.has(item.verify) ? item.verify : "";
-      if (!verify) errors.push(`task ${id} has no valid verify check`);
+      if (!verify) {
+        if (sizing.big) return; // drop one bad task, repair the plan instead of rejecting it
+        errors.push(`task ${id} has no valid verify check`);
+      }
       const blocked_by = Array.isArray(item.blocked_by)
         ? item.blocked_by
             .filter((n) => Number.isInteger(n) && n >= 1 && n <= data.tasks.length && n !== id)
@@ -111,10 +129,17 @@ export function normalizePlan(raw, objective, workspace) {
       });
     });
   }
+  if (sizing.big)
+    tasks = repairTasks(tasks, {
+      proposals: { ...proposals, planCheckIds: [...checkIds] },
+      minTasks: sizing.minTasks,
+      objective,
+    });
   tasks = expandTaskList(tasks, {
-    target: settings.autonomy === "standard" ? 4 : 12,
-    enabled: settings.expand_tasks === true,
-  });
+    target: sizing.big ? sizing.targetTasks : settings.autonomy === "standard" ? 4 : 12,
+    enabled: settings.expand_tasks === true || sizing.big,
+    expandSingle: sizing.big,
+  }).slice(0, 120);
 
   const seen = new Set();
   for (const t of tasks) {
@@ -139,12 +164,8 @@ export function normalizePlan(raw, objective, workspace) {
     remaining.splice(remaining.indexOf(ready), 1);
   }
 
-  if (
-    settings.require_e2e &&
-    checks.length > 0 &&
-    !checks.some((c) => c.kind === "e2e" || c.kind === "smoke")
-  )
-    errors.push("at least one e2e or smoke check is required in relentless mode");
+  // E2E/smoke is repaired deterministically above; never reject an otherwise
+  // good plan for a missing label (that rejection drove the tiny fallback).
 
   const requirements = [];
   if (Array.isArray(data.requirements)) {
@@ -158,8 +179,11 @@ export function normalizePlan(raw, objective, workspace) {
         ? r.checks.map(String).filter((c) => checkIds.has(c))
         : [];
       if (refs.length === 0) {
-        errors.push(`requirement ${id} has no valid check`);
-        continue;
+        if (sizing.big && checks.length) refs.push(checks[0].id);
+        else {
+          errors.push(`requirement ${id} has no valid check`);
+          continue;
+        }
       }
       if (requirements.some((x) => x.id === id)) errors.push(`duplicate requirement id ${id}`);
       requirements.push({ id, text: text || id, checks: [...new Set(refs)] });
@@ -180,16 +204,16 @@ export function normalizePlan(raw, objective, workspace) {
         .filter(Boolean)
     : [];
 
-  if (
-    campaign &&
-    objective.length > 8 &&
-    /\b(game|engine|app|application|platform|system|cli|server|api|tool|library|framework)\b/i.test(
-      objective
-    )
-  ) {
-    const kinds = new Set(checks.map((c) => c.kind));
-    if (!kinds.has("e2e") && !kinds.has("smoke"))
-      errors.push("campaign objectives require at least one e2e or smoke check");
+  if (sizing.big) {
+    const covered = new Set(requirements.flatMap((r) => r.checks));
+    for (const check of checks) {
+      if (covered.has(check.id)) continue;
+      requirements.push({
+        id: `req-${check.id}`.slice(0, 40),
+        text: `Verify ${check.id} — ${check.cmd.slice(0, 120)}`,
+        checks: [check.id],
+      });
+    }
   }
 
   if (errors.length) return { ok: false, errors };
@@ -213,23 +237,4 @@ export function normalizePlan(raw, objective, workspace) {
   };
 }
 
-export function validateMonotonic(nextPlan, previousChecks = [], previousTasks = []) {
-  const errors = [];
-  const nextById = new Map((nextPlan?.checks ?? []).map((c) => [c.id, c]));
-  for (const old of previousChecks) {
-    const next = nextById.get(old.id);
-    if (!next) {
-      errors.push(`re-plan dropped existing check ${old.id}`);
-      continue;
-    }
-    if ((old.cmd && next.cmd !== old.cmd) || (old.expect && next.expect !== old.expect)) {
-      errors.push(`re-plan weakened existing check ${old.id}`);
-    }
-  }
-  const nextTasks = new Map((nextPlan?.tasks ?? []).map((t) => [t.id, t]));
-  for (const old of previousTasks) {
-    if (old.status !== "completed") continue;
-    if (!nextTasks.has(old.id)) errors.push(`re-plan dropped completed task #${old.id}`);
-  }
-  return { ok: errors.length === 0, errors };
-}
+// validateMonotonic is re-exported from ./monotonic.js (size cap).

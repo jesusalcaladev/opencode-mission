@@ -1,62 +1,32 @@
 // lifecycle mixin — extracted from supervisor.js; behavior unchanged.
 import * as d from "./deps.js";
-const { os, path, mkdir, readFile, writeTextAtomic } = d;
-const cacheDir = () =>
-  process.env.OPENCODE_MISSION_CACHE_DIR ??
-  path.join(os.homedir?.() ?? process.env.HOME ?? "", ".cache", "opencode-mission");
-const pointerPath = () => path.join(cacheDir(), "current.json");
-const registryPath = () => path.join(cacheDir(), "missions.json");
-
-async function updateRegistry(root, state, objective = "") {
-  if (process.env.NODE_TEST_CONTEXT) return;
-  try {
-    await mkdir(cacheDir(), { recursive: true });
-    const pointer = JSON.stringify({
-      root,
-      sessionID: state.session_id ?? "",
-      id: state.id ?? "mission",
-      status: state.status,
-      at: Date.now(),
-    });
-    await writeTextAtomic(pointerPath(), `${pointer}\n`);
-
-    let list = [];
-    try {
-      const raw = await readFile(registryPath(), "utf8");
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) list = parsed;
-    } catch {
-      list = [];
-    }
-    const checks = Array.isArray(state.last_checks) ? state.last_checks : [];
-    const green = checks.filter((c) => c.ok).length;
-    const entry = {
-      root,
-      sessionID: state.session_id ?? "",
-      id: state.id ?? "mission",
-      objective: String(objective ?? "").slice(0, 200),
-      status: state.status,
-      pct: checks.length ? Math.round((green / checks.length) * 100) : 0,
-      updated_at: Date.now(),
-    };
-    list = [entry, ...list.filter((e) => e?.root !== root)].slice(0, 30);
-    await writeTextAtomic(registryPath(), `${JSON.stringify(list, null, 2)}\n`);
-  } catch {
-    // The registry is telemetry only; it must never fail a mission.
-  }
-}
+import { updateRegistry, directoryFor } from "./registry.js";
+const { path } = d;
 
 export const lifecycle = {
   /// Keep the TUI cache fresh after every idle boundary, not only at start.
   async publishRegistry(root, state, objective = "") {
-    await updateRegistry(root, state, objective);
+    await updateRegistry(root, state, objective, {
+      directory: directoryFor(state.session_id ?? "", {
+        boundDirectory: this.boundDirectory,
+        fallback: this.currentDirectory,
+        root,
+      }),
+      onError: (err) => this.warn(root, "registry publish failed", err),
+    });
   },
 
   async start(sessionID, target, options = {}) {
     const root = path.resolve(target);
     await this.d.ensureMission(root, options);
     const state = await this.d.loadState(root);
-    await updateRegistry(root, state, options.objective ?? "");
+    // Capture installed dependencies once, so the final report can say exactly
+    // what the mission added or changed. Never overwritten by a resume.
+    if (!state.deps_baseline) {
+      state.deps_baseline = this.d.dependencySnapshot(
+        await this.d.readText(path.join(root, "package.json"), "")
+      );
+    }
     state.status = this.d.STATUS.RUNNING;
     state.session_id = sessionID;
     state.finished_at = null;
@@ -111,7 +81,7 @@ export const lifecycle = {
     const startKey = this.d.promptKey("start", sessionID, String(state.turn));
     state.prompt_ledger = this.d.recordPrompt(state, { key: startKey, kind: "start", sessionID });
     await this.saveStateSafe(root, state);
-    await updateRegistry(root, state, options.objective ?? this.d.objectiveOf(missionText));
+    await this.publishRegistry(root, state, options.objective ?? this.d.objectiveOf(missionText));
     await this.ctx.session.prompt({ sessionID, text: prompt, delivery: "queue" });
     return this.statusText(root);
   },
@@ -151,11 +121,17 @@ export const lifecycle = {
     state.finished_at = new Date().toISOString();
     state.finish_reason = reason;
     state.summary = summary ?? "";
+    // Every terminal state leaves a detailed report in the workspace. A report
+    // failure is logged and never changes the mission outcome.
+    await this.writeMissionReport(root, state).catch((err) =>
+      this.warn(root, "mission report failed", err)
+    );
     await this.saveStateSafe(root, state);
-    await updateRegistry(root, state, state.objective ?? "");
+    await this.publishRegistry(root, state, state.objective ?? "");
     await this.journal(root, `mission ${status}: ${reason}`);
     const label = status === this.d.STATUS.COMPLETE ? "MISSION COMPLETE" : "MISSION STOPPED";
-    const text = `[${label}] ${reason}${state.unblock ? `. Unblock: ${state.unblock}` : ""}. Mission state: ${path.join(root, ".mission")}`;
+    const reportPath = state.report_path ? ` Report: ${path.join(root, state.report_path)}.` : "";
+    const text = `[${label}] ${reason}${state.unblock ? `. Unblock: ${state.unblock}` : ""}. Mission state: ${path.join(root, ".mission")}.${reportPath}`;
     await this.ctx.session
       .synthetic({ sessionID, text })
       .catch((err) => this.warn(root, "mission notice failed", err));

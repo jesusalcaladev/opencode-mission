@@ -80,6 +80,8 @@ export function applyExtension(state, extension = {}) {
     ...state,
     extensions: (state.extensions ?? 0) + 1,
     max_turns: (state.max_turns ?? 16) + (extension.turns ?? EXTEND_TURNS),
+    // A budget stop must be extendable by the same manual EXTEND marker.
+    budget_usd: (state.budget_usd ?? 5) + (extension.budget_usd ?? EXTEND_BUDGET_USD),
     max_wallclock_min:
       (state.max_wallclock_min ?? 0) > 0
         ? state.max_wallclock_min + (extension.minutes ?? EXTEND_MINUTES)
@@ -121,7 +123,12 @@ export function autoExtendDecision({ decision, state = {}, progress = false, now
     const deadline = Date.parse(state.started_at) + state.max_wallclock_min * 60_000;
     if (Number.isFinite(deadline) && now >= deadline) return { type: "stop", reason: "deadline" };
   }
-  if (!progress) return { type: "stop", reason: "stalled" };
+  // "Never give up" means a quiet stretch extends the soft ceilings (or the
+  // watchdog re-plans upstream) instead of aborting healthy work.
+  if (!progress)
+    return state.never_give_up
+      ? { type: "extend", reason: "stalled" }
+      : { type: "stop", reason: "stalled" };
   return { type: "extend", reason };
 }
 

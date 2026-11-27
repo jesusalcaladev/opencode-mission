@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
 import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
+import { mkdir, symlink } from "node:fs/promises";
 import { runChecks, workspaceStamp } from "../src/checks.js";
+import { listStampFiles, statFiles } from "../src/mission/stamp.js";
 import { loadProjectInstructions } from "../src/mission/instructions.js";
 import { upsertFact, renderFacts } from "../src/mission/facts.js";
 import { Supervisor } from "../src/supervisor.js";
@@ -51,6 +53,52 @@ test("checks: a valid cache skips command execution", async () => {
     });
     assert.equal(hit.length, 1);
     assert.equal((await readFile(path.join(root, "count.txt"), "utf8")).length, 1);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("stamp: dependency and build directories are skipped, sources are not", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "mission-stamp-"));
+  try {
+    await writeFile(path.join(root, "src.js"), "one");
+    await mkdir(path.join(root, "node_modules", "pkg"), { recursive: true });
+    await writeFile(path.join(root, "node_modules", "pkg", "index.js"), "dep");
+    await mkdir(path.join(root, "dist"), { recursive: true });
+    await writeFile(path.join(root, "dist", "bundle.js"), "out");
+    const files = await listStampFiles(root);
+    assert.deepEqual(
+      files.map((f) => path.basename(f)),
+      ["src.js"],
+      "node_modules and dist must never be walked"
+    );
+    const before = await workspaceStamp(root);
+    await writeFile(path.join(root, "node_modules", "pkg", "index.js"), "changed dep");
+    assert.equal(await workspaceStamp(root), before, "dependency churn is not a source change");
+    // Different size and content, so the mtime granularity cannot hide the change.
+    await writeFile(path.join(root, "src.js"), "two and more");
+    assert.notEqual(await workspaceStamp(root), before);
+    assert.equal(await workspaceStamp(path.join(root, "gone")), "missing");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("stamp: missing roots, unreadable files and symlinks are tolerated", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "mission-stamp-edge-"));
+  try {
+    const real = path.join(root, "a.txt");
+    await writeFile(real, "x");
+    await symlink(real, path.join(root, "link.txt"));
+    assert.deepEqual(
+      (await listStampFiles(root)).map((f) => path.basename(f)),
+      ["a.txt"],
+      "a symlink is not a source file"
+    );
+    assert.deepEqual(await listStampFiles(path.join(root, "gone")), []);
+    const stats = await statFiles([real, path.join(root, "missing.txt")]);
+    assert.equal(stats.length, 1);
+    assert.equal(stats[0].file, real);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -106,6 +154,19 @@ test("repeat guard: three stalled turns force strategy tier 3", async () => {
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("autonomy: defaultAutonomy makes missions unattended, invalid values are ignored", () => {
+  const on = new Supervisor(fakeCtx(), { defaultAutonomy: "relentless" });
+  assert.equal(on.defaultAutonomy, "relentless");
+  assert.equal(on.unattendedSettings({}, "relentless").max_turns, 0);
+  on.dispose();
+  const campaign = new Supervisor(fakeCtx(), { defaultAutonomy: "campaign" });
+  assert.equal(campaign.defaultAutonomy, "campaign");
+  campaign.dispose();
+  const off = new Supervisor(fakeCtx(), { defaultAutonomy: "yolo" });
+  assert.equal(off.defaultAutonomy, null);
+  off.dispose();
 });
 
 test("models: fastModel is used for read-only roles", () => {

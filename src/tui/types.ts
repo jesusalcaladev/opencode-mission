@@ -39,6 +39,9 @@ export type MissionSnapshot = {
   started_at: number;
   elapsed_ms: number;
   finish_reason: string;
+  report_path: string;
+  recon_agents: number;
+  discovery_done: boolean;
   last_checks_at: number;
   worktree_branch: string;
   auto_extend: boolean;
@@ -54,6 +57,8 @@ export type MissionSnapshot = {
     milestone: string;
     stage: string;
     attempts: number;
+    owner?: string;
+    last_error?: string;
     started_at: number;
     finished_at: number;
     duration_ms: number;
@@ -83,6 +88,16 @@ export type MissionSnapshot = {
   reqTotal: number;
   budget_pct: number;
   turn_pct: number;
+  sizing: {
+    big: boolean;
+    minChecks: number;
+    minTasks: number;
+    targetChecks: number;
+    targetTasks: number;
+  } | null;
+  require_deploy: boolean;
+  deploy: Record<string, unknown> | null;
+  deployVerified: boolean | null;
   active: boolean;
   updatedAt: number;
 };

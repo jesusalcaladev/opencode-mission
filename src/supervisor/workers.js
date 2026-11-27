@@ -66,7 +66,21 @@ export const workers = {
         this.roles.set(id, this.d.ROLE.IMPLEMENTER);
         this.knownWorkers.add(id);
         if (!this.briefs) this.briefs = new Map();
-        this.briefs.set(id, await this.buildWorkerBrief(root, state, task));
+        try {
+          this.briefs.set(id, await this.buildWorkerBrief(root, state, task));
+        } catch (err) {
+          // A leaked workers entry permanently consumes a parallel slot.
+          this.unbind(id);
+          this.workers.delete(id);
+          this.roles.delete(id);
+          this.knownWorkers.delete(id);
+          this.d.unlockFiles(this.fileLocks, task.id);
+          await this.journal(
+            root,
+            `worker brief failed for task ${task.id}: ${this.d.shortError(err)}`
+          );
+          continue;
+        }
         spawned.push({ id, task });
       }
       if (!spawned.length) continue;
@@ -144,7 +158,11 @@ export const workers = {
     const leased = await this.d.loadProgress(root);
     const taskList = await this.d.loadTasks(root);
     const usage = await this.sessionUsage(w.id);
-    const report = fresh.task_reports?.[String(w.task.id)];
+    const storedReport = fresh.task_reports?.[String(w.task.id)];
+    const report =
+      storedReport && (!storedReport.bySession || storedReport.bySession === w.id)
+        ? storedReport
+        : null;
     const session = await this.ctx.session.get({ sessionID: w.id }).catch(() => null);
     const lease = leased.find((p) => p.id === w.task.id);
     const leaseLive = lease && lease.lease_until > Date.now();

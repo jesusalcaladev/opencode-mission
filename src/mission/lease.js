@@ -8,6 +8,24 @@ import { TASK_STATUS } from "./state.js";
 export const LEASE_MS = 5 * 60 * 1000;
 export const MAX_ATTEMPTS = 3;
 
+/// A done report is honest only from the session holding the task lease.
+/// Empty owner/lease fields are allowed for lead-authored small missions.
+export function canReport(lease = null, sessionID = "", workerTaskId = 0, now = Date.now()) {
+  const ownerOk = !lease?.owner || lease.owner === sessionID;
+  const workerOwns =
+    workerTaskId > 0 &&
+    ownerOk &&
+    (lease?.status === TASK_STATUS.IN_PROGRESS || !lease?.status) &&
+    (!lease?.lease_until || lease.lease_until > now);
+  const leadOwns =
+    workerTaskId === 0 &&
+    ownerOk &&
+    (lease?.status === TASK_STATUS.IN_PROGRESS ||
+      lease?.status === TASK_STATUS.PENDING ||
+      !lease?.status);
+  return workerOwns || leadOwns;
+}
+
 export function fromTasks(tasks, _now = Date.now()) {
   return tasks.map((t, i) => ({
     id: Number(t.id) || i + 1,
@@ -27,6 +45,24 @@ export function toTasks(progress, tasks) {
   return tasks.map((t, i) => {
     const p = progress.find((x) => x.id === t.id);
     return { ...t, status: p?.status ?? t.status ?? (i === 0 ? TASK_STATUS.PENDING : t.status) };
+  });
+}
+
+/// Reconcile the two durable task views. A completion earned in either view is
+/// sticky; failures/leases come from progress.json (the lease owner). Without
+/// this, a worker report marked a task done in progress.json while the TUI and
+/// computeProgress kept reading "in_progress" from tasks.json forever.
+export function syncTasks(progress = [], tasks = []) {
+  const byId = new Map((Array.isArray(progress) ? progress : []).map((p) => [Number(p?.id), p]));
+  return (Array.isArray(tasks) ? tasks : []).map((task) => {
+    const entry = byId.get(Number(task?.id));
+    if (!entry) return task;
+    const completed =
+      task.status === TASK_STATUS.COMPLETED || entry.status === TASK_STATUS.COMPLETED;
+    return {
+      ...task,
+      status: completed ? TASK_STATUS.COMPLETED : (entry.status ?? task.status),
+    };
   });
 }
 

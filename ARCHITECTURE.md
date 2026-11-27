@@ -17,6 +17,9 @@ src/
   skills.js                static skill catalog registered with OpenCode
   skills/*.md              skill contracts (workflow, review, research, verdict)
   supervisor/
+    discovery.js           recon agents, architect blueprint, plan synthesis (prelude)
+    plan-files.js          persists a validated plan (frontmatter, criteria, tasks, state)
+    report.js              writes MISSION_REPORT.md on every terminal state
     context.js             gathers disk state into briefs for lead/workers/roles
     turn.js                THE main turn loop (single owner of the turn flow)
     telemetry.js           turn metrics, journal line and status text
@@ -66,6 +69,10 @@ src/
     host-restart.js        pure host-restart decision (WAKE, STOP, backoff, cap)
     schema.js              pure state validation + normalization on load
     progress.js            pure, monotonic progress shared by harness and TUI
+    discovery.js           recon areas/prompts, proposal + blueprint parsing, memo merge
+    report.js              pure MISSION_REPORT.md builder
+    report-inputs.js       durable report inputs + dependency snapshot/diff
+    stamp.js               bounded workspace file listing/stat for check caching
     cost.js                pure per-session cost merge (monotonic)
     quality.js             mutation/vacuity decision rules (pure)
     locks.js               per-file locks for a shared workspace (pure)
@@ -87,7 +94,9 @@ src/
   tui/
     keymap.ts              palette/keybind commands (extracted from tui.tsx)
     model.js               read model (pure, reads durable files)
+    select.js              pure snapshot selection (session-scoped, stale-safe)
     normalize.js           pure check/task/agent/requirement normalization
+    refresh.js             coalesced, order-safe refresh runner + resilient polling
     format.js              formatters (pure)
     registry.js            mission discovery
     types.ts               shared types + store hook
@@ -107,6 +116,9 @@ with Bun, which rejects test globals outside a test runner. All tests live in
 
 ```text
 /mission start <objective>
+  -> recon agents (3-4, read-only, parallel) -> .mission/discovery/<area>.md
+  -> architect (1 agent) -> blueprint.md + blueprint.json (fenced JSON plan)
+  -> normalizePlan validates it (or falls back to the planner with the blueprint)
   -> planner (free model, validated by normalizePlan)
   -> .mission/{mission,criteria,tasks,progress,charter,memory,summary}.json/md
   -> investigator (read-only) -> implementer waves (assigned files only)
@@ -168,6 +180,12 @@ is rejected and the lease is released for retry.
 20. The host supervisor is opt-in: it reacts only to a `WAKE` that stayed stale,
     never writes `state.json`/criteria/tasks, and is bounded by `STOP`/`PAUSE`,
     exponential backoff and `max_restarts` per window.
+21. Discovery artifacts are cache, not authority: a blueprint plan is validated by
+    the same `normalizePlan` as any planner plan, cached recon is reused instead of
+    re-dispatched, and the recon memo is replaced inside fixed markers (never
+    appended twice). Discovery failure always degrades to the planner path.
+22. `MISSION_REPORT.md` is written by the harness from durable files only; a report
+    failure is journaled and never changes the mission outcome.
 
 ## Failure model
 

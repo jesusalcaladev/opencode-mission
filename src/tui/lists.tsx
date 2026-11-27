@@ -11,7 +11,7 @@ export function CheckList(props: { checks: MissionSnapshot["checks"] }) {
       when={props.checks.length > 0}
       fallback={<text fg={g.faint}>No checks recorded yet.</text>}
     >
-      <For each={props.checks.slice(0, 24)}>
+      <For each={props.checks.slice(0, 30)}>
         {(check) => (
           <text fg={check.ok ? g.success : g.error}>
             <span>{checkGlyph(check.ok)} </span>
@@ -29,7 +29,7 @@ export function TaskList(props: { tasks: MissionSnapshot["tasks"] }) {
   const g = useColors();
   return (
     <Show when={props.tasks.length > 0} fallback={<text fg={g.faint}>No tasks planned.</text>}>
-      <For each={props.tasks.slice(0, 24)}>
+      <For each={props.tasks.slice(0, 40)}>
         {(task) => (
           <text fg={statusColor(g, task.status)}>
             <span>{statusGlyph(task.status)} </span>
@@ -46,6 +46,10 @@ export function TaskList(props: { tasks: MissionSnapshot["tasks"] }) {
             </Show>
             <Show when={task.duration_ms > 0}>
               <span fg={g.faint}> {duration(task.duration_ms)}</span>
+            </Show>
+            {/* Why a task keeps failing is the most useful line during a long run. */}
+            <Show when={task.status === "failed" && task.last_error}>
+              <span fg={g.error}> {truncate(task.last_error, 28)}</span>
             </Show>
           </text>
         )}

@@ -18,7 +18,8 @@ export const decisions = {
       results,
       tasks,
       requirements,
-      Number(state?.progress_pct) || 0
+      Number(state?.progress_pct) || 0,
+      state?.require_deploy ? (state?.deploy ?? null) : null
     );
     state.progress_pct = progress.pct;
     return progress;
@@ -33,15 +34,31 @@ export const decisions = {
       this.d.pauseRequested(root),
       criteria ? Promise.resolve(null) : this.d.loadCriteria(root),
     ]);
+    const activeCriteria = criteria ?? loaded;
+    const deployment = state.require_deploy
+      ? this.d.deploymentVerified({
+          criteria: activeCriteria,
+          results,
+          tasks,
+          commit: state.deploy?.lastCommit ?? null,
+        })
+      : undefined;
     return this.d.decideNext({
       state,
       results,
       tasks,
+      reportedIDs:
+        (state.writes ?? 0) > 0
+          ? Object.entries(state.task_reports ?? {})
+              .filter(([, report]) => report?.status === "done")
+              .map(([id]) => Number(id))
+          : [],
       verdict,
       stopFile,
       pauseFile,
-      criteria: criteria ?? loaded,
+      criteria: activeCriteria,
       baseline: state.check_baseline ?? {},
+      deployment,
     });
   },
 
@@ -53,7 +70,12 @@ export const decisions = {
     const overdue = this.d.expired(progress, now);
     if (overdue.length === 0) return;
     const limit = this.taskAttemptLimit(state);
-    for (const id of overdue) this.d.fail(progress, id, "lease expired", now, limit);
+    for (const id of overdue) {
+      this.d.fail(progress, id, "lease expired", now, limit);
+      // A report from the expired lease must never credit its retry.
+      if (state?.task_reports) delete state.task_reports[String(id)];
+    }
+    if (state) await this.saveStateSafe(root, state);
     const stored = await this.d.loadTasks(root);
     for (const task of stored) {
       if (overdue.includes(task.id)) {

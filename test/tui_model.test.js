@@ -74,6 +74,53 @@ async function fixture(overrides = {}, parent) {
   return root;
 }
 
+test("tui model: tasks merge lease attempts, timing and stage from disk", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "mission-tui-lease-"));
+  try {
+    const dir = path.join(root, ".mission");
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, "state.json"), JSON.stringify({ status: "running" }));
+    await writeFile(path.join(dir, "mission.md"), "---\nid: x\n---\nBuild it\n");
+    await writeFile(
+      path.join(dir, "tasks.json"),
+      JSON.stringify({
+        tasks: [
+          { id: 1, subject: "Renderer", status: "pending", verify: "e2e", stage: "implement" },
+        ],
+      })
+    );
+    await writeFile(
+      path.join(dir, "progress.json"),
+      JSON.stringify({
+        tasks: [
+          {
+            id: 1,
+            status: "in_progress",
+            owner: "w9",
+            attempts: 2,
+            started_at: 1000,
+            finished_at: 0,
+            last_error: "timeout in shader build",
+          },
+        ],
+      })
+    );
+    await writeFile(path.join(dir, "criteria.json"), JSON.stringify({ checks: [] }));
+    const s = await loadMission(root);
+    const task = s.tasks[0];
+    assert.equal(task.status, "in_progress", "lease status wins over a stale tasks.json");
+    assert.equal(task.attempts, 2);
+    assert.equal(task.owner, "w9");
+    assert.match(task.last_error, /shader/);
+    assert.equal(task.started_at, 1000);
+    // Stage survives even though the task was re-normalized by the harness.
+    assert.equal(task.stage, "implement");
+    assert.equal(task.duration_ms, 0);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("tui model: progress blends checks, tasks and requirements", () => {
   const p = computeProgress(
     [{ ok: true }, { ok: false }],

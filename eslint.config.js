@@ -2,7 +2,7 @@ import js from "@eslint/js";
 import globals from "globals";
 
 export default [
-  { ignores: ["node_modules/**", "runs/**", "demos/**", "coverage/**"] },
+  { ignores: ["node_modules/**", "runs/**", "demos/**", "coverage/**", ".mission/**"] },
   {
     files: ["**/*.js", "**/*.mjs"],
     languageOptions: {

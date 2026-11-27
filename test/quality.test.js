@@ -23,8 +23,46 @@ test("a check that was green at baseline cannot complete a task", () => {
   assert.equal(applyTaskResults(tasks, results, { a: false }).tasks[0].status, "completed");
   assert.equal(
     applyTaskResults([{ id: 1, status: "pending" }], [], { a: false }).tasks[0].status,
+    "pending",
+    "a task without a verify check needs an explicit done report"
+  );
+  assert.equal(
+    applyTaskResults(
+      [{ id: 1, status: "pending" }],
+      [],
+      { a: false },
+      {
+        reportedIDs: new Set([1]),
+      }
+    ).tasks[0].status,
     "completed"
   );
+});
+
+test("one green check does not credit several unreported tasks, and red reopens", () => {
+  const tasks = [
+    { id: 1, status: "pending", verify: "unit" },
+    { id: 2, status: "pending", verify: "unit" },
+  ];
+  const results = [{ id: "unit", ok: true }];
+  const unreported = applyTaskResults(tasks, results, { unit: false });
+  assert.deepEqual(
+    unreported.tasks.map((t) => t.status),
+    ["pending", "pending"]
+  );
+  const reported = applyTaskResults(tasks, results, { unit: false }, { reportedIDs: new Set([2]) });
+  assert.deepEqual(
+    reported.tasks.map((t) => t.status),
+    ["pending", "completed"]
+  );
+  const completed = [{ id: 1, status: "completed", verify: "unit" }];
+  const regressed = applyTaskResults(
+    completed,
+    [{ id: "unit", ok: false }],
+    { unit: false },
+    { reopenRed: true }
+  );
+  assert.equal(regressed.tasks[0].status, "pending");
 });
 
 test("baseline capture, red marking and transitions are monotone", () => {
@@ -72,16 +110,19 @@ test("mutation decision marks a check vacuous only when it survives removal", ()
   assert.equal(mutationDecision({ mutatedOk: true, files: [] }).reason, "skipped");
 });
 
-test("relentless plans require a real e2e or smoke check", () => {
+test("relentless plans are repaired with a real e2e or smoke check", () => {
   const base = {
     objective: "o",
     checks: [{ id: "a", cmd: "node --test", expect: "exit0" }],
     tasks: [{ id: 1, subject: "Do it", files: ["a.js"], verify: "a", blocked_by: [] }],
     settings: { autonomy: "relentless" },
   };
-  const rejected = normalizePlan(base, "o", "/tmp/ws");
-  assert.equal(rejected.ok, false);
-  assert.match(rejected.errors.join(" "), /e2e or smoke/);
+  const repaired = normalizePlan(base, "o", "/tmp/ws");
+  assert.equal(repaired.ok, true, repaired.errors.join("; "));
+  assert.ok(
+    repaired.plan.checks.some((c) => c.kind === "e2e" || c.kind === "smoke"),
+    "a missing e2e label must be repaired, not reject the whole plan into a smaller fallback"
+  );
   const accepted = normalizePlan(
     { ...base, checks: [{ ...base.checks[0], kind: "e2e" }] },
     "o",

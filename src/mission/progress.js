@@ -13,16 +13,26 @@ export function isTaskVerified(task = {}, results = []) {
   return Boolean(check?.ok);
 }
 
-export function computeProgress(checks = [], tasks = [], requirements = [], floor = 0) {
+export function computeProgress(
+  checks = [],
+  tasks = [],
+  requirements = [],
+  floor = 0,
+  deploy = null
+) {
   const green = checks.filter((c) => c?.ok).length;
   const done = tasks.filter((t) => isTaskVerified(t, checks)).length;
   const covered = requirements.filter((r) => r?.covered).length;
   const checkRatio = ratio(green, checks.length);
   const taskRatio = ratio(done, tasks.length);
-  const reqRatio = ratio(covered, requirements.length);
+  // No declared requirements means nothing is uncovered, not 0% coverage.
+  const reqRatio = requirements.length ? ratio(covered, requirements.length) : 1;
+  const deployVerified = deploy ? deploy.verified === true : null;
   const weighted =
     checks.length > 0 || tasks.length > 0 || requirements.length > 0
-      ? checkRatio * 0.6 + taskRatio * 0.3 + reqRatio * 0.1
+      ? deployVerified === null
+        ? checkRatio * 0.6 + taskRatio * 0.3 + reqRatio * 0.1
+        : checkRatio * 0.5 + taskRatio * 0.25 + reqRatio * 0.1 + (deployVerified ? 0.15 : 0)
       : 0;
   const raw = Math.round(weighted * 100);
   const minimum = Math.max(0, Math.min(100, Number(floor) || 0));
@@ -36,6 +46,7 @@ export function computeProgress(checks = [], tasks = [], requirements = [], floo
     checksPct: Math.round(checkRatio * 100),
     tasksPct: Math.round(taskRatio * 100),
     reqPct: Math.round(reqRatio * 100),
+    deployVerified,
     raw_pct: raw,
     pct: Math.max(minimum, Math.min(100, raw)),
   };

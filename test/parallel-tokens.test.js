@@ -88,7 +88,15 @@ test("mission parallel starts independent lead sessions", async () => {
   const base = await mkdtemp(path.join(os.tmpdir(), "mission-parallel-cmd-"));
   try {
     const ctx = fakeCtx({ createdIds: ["lead-a", "lead-b"] });
-    const sup = new Supervisor(ctx, { missionsRoot: base });
+    const plan = JSON.stringify({
+      objective: "Build the CLI",
+      checks: [
+        { id: "unit", cmd: "node --test", expect: "exit0", timeout_ms: 30000, kind: "unit" },
+      ],
+      tasks: [{ id: 1, subject: "Build the CLI", files: [], verify: "unit", blocked_by: [] }],
+      settings: { max_turns: 4, budget_usd: 1 },
+    });
+    const sup = new Supervisor(ctx, { missionsRoot: base, generate: async () => plan });
     const reply = await sup.startParallel("original", "Build alpha CLI | Build beta CLI");
     assert.match(reply, /Started 2 mission\(s\)/);
     assert.equal(ctx.prompts.filter((text) => text.startsWith("[MISSION COORDINATOR]")).length, 2);

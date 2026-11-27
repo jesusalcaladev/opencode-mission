@@ -9,7 +9,22 @@ export const parallel = {
     });
     const id = created?.id ?? created?.data?.id;
     if (!id) throw new Error("session.create returned no id");
-    const reply = await this.planAndStart(id, objective);
+    // Parallel missions must never share one workspace. Give each one an
+    // isolated directory instead of letting them race on the same .mission/.
+    const slug =
+      String(objective)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "")
+        .split("-")
+        .slice(0, 3)
+        .join("-") || "mission";
+    const base = this.missionsRoot ?? this.d.path.join(this.currentDirectory, "missions");
+    const workspace = this.d.path.join(
+      base,
+      `${slug}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
+    );
+    const reply = await this.planAndStart(id, objective, { workspace });
     return `${objective} → ${id}: ${String(reply).split("\n")[0]}`;
   },
 

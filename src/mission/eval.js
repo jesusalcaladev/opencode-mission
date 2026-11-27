@@ -29,6 +29,9 @@ const KEYS = [
   "valid",
   "switched_count",
   "model_id",
+  "discovery_done",
+  "goal_audit",
+  "recon_agents",
 ];
 
 const MINIMUMS = {

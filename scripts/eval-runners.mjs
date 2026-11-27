@@ -17,6 +17,7 @@ import {
 import { exists, fakeCtx, prepareMission } from "./eval-context.mjs";
 import {
   runContextCase,
+  runDiscoveryCase,
   runDoctorCase,
   runHostRestartCase,
   runProgressCase,
@@ -143,6 +144,7 @@ export async function runCase(testCase, maxTurns = 24) {
       "host-restart": () => runHostRestartCase(testCase, base),
       context: () => runContextCase(testCase, base),
       doctor: () => runDoctorCase(testCase, base),
+      discovery: () => runDiscoveryCase(testCase, base),
       progress: () => runProgressCase(testCase, base),
       tasks: () => runTaskListCase(testCase, base),
       "retry-context": () => runContextCase(testCase, base),

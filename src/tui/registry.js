@@ -37,11 +37,22 @@ export async function isMissionRoot(root) {
   return present.every(Boolean);
 }
 
-export async function discoverRoots(missionsRoot, limit = 12) {
+export function projectFilter(_directory) {
+  // Lenient discovery: never drop the only mission because of a directory
+  // mismatch or a TUI launched from a different cwd. Strict session scoping
+  // happens in selectSnapshot(); `isMissionRoot` filters half-authored roots.
+  return () => true;
+}
+
+export async function discoverRoots(missionsRoot, limit = 12, directory = null) {
   const candidates = new Set();
+  const fromProject = projectFilter(directory);
   const pointer = await readPointer();
-  if (pointer?.root) candidates.add(pointer.root);
-  for (const entry of await readRegistry()) candidates.add(entry.root);
+  if (pointer?.root && fromProject(pointer)) candidates.add(pointer.root);
+  for (const entry of await readRegistry()) if (fromProject(entry)) candidates.add(entry.root);
+  // The active session's workspace is a first-class source, so a mission is
+  // found even when the cache was not written (fresh, cleaned, or failed).
+  if (directory) candidates.add(path.resolve(directory));
   if (missionsRoot) {
     try {
       const dirs = await readdir(path.resolve(missionsRoot), { withFileTypes: true });

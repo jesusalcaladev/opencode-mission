@@ -1,8 +1,8 @@
 {
   "version": 1,
   "summary": {
-    "total": 20,
-    "passed": 20,
+    "total": 21,
+    "passed": 21,
     "failed": 0,
     "success_rate": 1,
     "avg_turns": 0.9,
@@ -28,6 +28,9 @@
       "pass": true
     },
     "cost-multi-session": {
+      "pass": true
+    },
+    "discovery-blueprint": {
       "pass": true
     },
     "doctor-clean": {

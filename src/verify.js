@@ -98,11 +98,30 @@ export async function gitCommit(root, message, paths = []) {
   );
   const text = `${commit.stdout}\n${commit.stderr}`;
   if (commit.code !== 0) {
-    if (text.includes("nothing to commit")) return { ok: true, sha: null, reason: "no changes" };
+    if (text.includes("nothing to commit") || text.includes("nothing added to commit"))
+      return { ok: true, sha: null, reason: "no changes" };
     return { ok: false, reason: `git commit failed: ${text.trim().slice(0, 200)}` };
   }
   const head = await runCommand("git rev-parse --short HEAD", root, 5000);
   return { ok: true, sha: head.stdout.trim(), reason: "committed" };
+}
+
+/// Read-only summary for the mission report: current commit, branch and the
+/// diff stat. Never mutates the repository.
+export async function gitSummary(root) {
+  if (!(await isGitRepo(root)))
+    return { ok: false, reason: "not a git repository", stat: "", head: "", branch: "" };
+  const [stat, head, branch] = await Promise.all([
+    runCommand("git diff --stat HEAD", root, 8000),
+    runCommand("git rev-parse --short HEAD", root, 5000),
+    runCommand("git rev-parse --abbrev-ref HEAD", root, 5000),
+  ]);
+  return {
+    ok: true,
+    stat: stat.stdout.trim(),
+    head: head.stdout.trim(),
+    branch: branch.stdout.trim(),
+  };
 }
 
 /// Undo a verified checkpoint without touching later unrelated work.

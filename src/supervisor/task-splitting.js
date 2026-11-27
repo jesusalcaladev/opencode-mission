@@ -3,7 +3,7 @@
 
 export const taskSplitting = {
   async maybeSplitStuckTask(root, state, tasks) {
-    if (!this.options.generate || !state.auto_extend) return false;
+    if (!this.options.generate) return false;
     const progress = await this.d.loadProgress(root);
     const criteria = await this.d.loadCriteria(root);
     const checkIds = new Set((criteria.checks ?? []).map((c) => c.id));

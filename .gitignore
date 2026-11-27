@@ -1,4 +1,5 @@
 node_modules/
 runs/
+.mission/
 *.log
 .DS_Store

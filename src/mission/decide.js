@@ -42,17 +42,47 @@ export function verifyingTransition(results = [], baseline = {}) {
   return results.some((r) => r?.ok === true && baseline?.[r.id] === false);
 }
 
-export function applyTaskResults(tasks, results, baseline = null) {
+export function applyTaskResults(tasks, results, baseline = null, options = {}) {
   const out = tasks.map((t) => ({ ...t }));
+  // A check that was already green at the start is not proof of new work —
+  // unless a worker explicitly reported that task done with evidence. That
+  // exception is what makes real toolchain checks (npm test) completable.
+  const reported =
+    options.reportedIDs instanceof Set
+      ? options.reportedIDs
+      : new Set(
+          (Array.isArray(options.reportedIDs) ? options.reportedIDs : []).map((id) => Number(id))
+        );
   let changed = false;
+  const verifyCounts = new Map();
+  for (const task of out) {
+    if (task.verify) verifyCounts.set(task.verify, (verifyCounts.get(task.verify) ?? 0) + 1);
+  }
   for (let pass = 0; pass < out.length + 1; pass += 1) {
     let changedThisPass = false;
     for (const task of out) {
-      if (task.status === TASK_STATUS.COMPLETED) continue;
-      if (task.verify) {
+      if (task.status === TASK_STATUS.COMPLETED) {
+        // A check that goes red again must not leave a "verified" task behind.
+        if (options.reopenRed && task.verify) {
+          const current = results.find((r) => r.id === task.verify);
+          if (current && !current.ok) {
+            task.status = TASK_STATUS.PENDING;
+            changed = true;
+            changedThisPass = true;
+          }
+        }
+        continue;
+      }
+      if (!task.verify) {
+        // Verify-less work (improvements, spawns, synthesized verifiers) is
+        // credited only by an explicit worker report, never by a passing turn.
+        if (!reported.has(Number(task.id))) continue;
+      } else {
         const result = results.find((r) => r.id === task.verify);
         if (!result || !result.ok) continue;
-        if (baseline && baseline[task.verify] === true) continue;
+        if (baseline && baseline[task.verify] === true && !reported.has(Number(task.id))) continue;
+        // One green check must not credit many tasks that never did the work.
+        if ((verifyCounts.get(task.verify) ?? 0) > 1 && !reported.has(Number(task.id))) continue;
       }
       const blocked = (task.blocked_by ?? []).some((id) => {
         const b = out.find((x) => x.id === id);
@@ -97,6 +127,8 @@ export function decideNext({
   pauseFile,
   criteria,
   baseline = null,
+  reportedIDs = [],
+  deployment = null,
   now = Date.now(),
 }) {
   if (stopFile) return { type: "stop", reason: "stop-file" };
@@ -140,10 +172,27 @@ export function decideNext({
       return { type: "replan", reason: "blocked", unblock: verdict.unblock ?? "" };
     return { type: "stop", reason: "blocked", unblock: verdict.unblock ?? "" };
   }
+  // Large missions are not done when the checks happen to be green: the work
+  // must also be published (commit + e2e/smoke check). Only harness evidence
+  // reaches this gate; a model verdict cannot set `deployment.verified`.
+  if (deployment && deployment.verified !== true)
+    return { type: "continue", reason: "deploy-pending", deployment };
   const green = results.length > 0 && results.every((r) => r.ok);
   const requirementsOk = requirementsMet(criteria, results);
   const hasVerifiedTasks = tasks.some((t) => Boolean(t.verify));
-  const verifiedWork = !baseline || !hasVerifiedTasks || verifyingTransition(results, baseline);
+  // A task whose check was already green at start is only credited after a
+  // worker report; count that as verified work too, otherwise the run would
+  // stall forever at 100% with every task done.
+  const reported = new Set((Array.isArray(reportedIDs) ? reportedIDs : []).map((id) => Number(id)));
+  const earnedByReport = tasks.some(
+    (t) =>
+      t.status === TASK_STATUS.COMPLETED &&
+      reported.has(Number(t.id)) &&
+      baseline?.[t.verify] === true &&
+      results.find((r) => r.id === t.verify)?.ok === true
+  );
+  const verifiedWork =
+    !baseline || !hasVerifiedTasks || verifyingTransition(results, baseline) || earnedByReport;
   if (
     green &&
     requirementsOk &&

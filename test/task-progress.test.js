@@ -4,6 +4,7 @@ import { expandTaskList } from "../src/planner/tasks.js";
 import { computeProgress, isTaskVerified } from "../src/mission/progress.js";
 import { claim, release, fail, fromTasks } from "../src/mission/lease.js";
 import { normalizePlan } from "../src/planner.js";
+import { normalizeTask } from "../src/mission/state.js";
 
 test("expandTaskList splits multi-file tasks and remaps dependencies", () => {
   const tasks = [
@@ -74,6 +75,30 @@ test("leases record start and finish timestamps", () => {
   assert.equal(claim(progress, 1, "worker2", now + 10, 1000), false);
   fail(progress, 1, "boom", now + 20, 3);
   assert.equal(progress[0].finished_at, now + 20);
+});
+
+test("normalizeTask round-trips stage, milestone and hints (no silent data loss)", () => {
+  const planned = {
+    id: 4,
+    subject: "Wire the renderer",
+    files: ["render.js"],
+    verify: "build",
+    blocked_by: [1],
+    stage: "implement",
+    milestone: "foundation",
+    cost_hint: "low",
+    time_hint: "10m",
+    attempts: 2,
+    started_at: 1000,
+    finished_at: 2000,
+  };
+  const normalized = normalizeTask(planned);
+  assert.equal(normalized.stage, "implement");
+  assert.equal(normalized.milestone, "foundation");
+  assert.equal(normalized.cost_hint, "low");
+  assert.equal(normalized.attempts, 2);
+  assert.equal(normalized.started_at, 1000);
+  assert.deepEqual(normalized.blocked_by, [1]);
 });
 
 test("normalizePlan keeps stage labels and expands coarse campaign tasks", () => {

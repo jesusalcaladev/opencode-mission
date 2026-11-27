@@ -35,13 +35,11 @@ export const wake = {
         if ((session.time?.busy ?? 0) > (session.time?.idle ?? 0)) continue;
         const key = this.d.promptKey("wake", entry.sessionID);
         if (this.d.isDuplicatePrompt(state, key)) continue;
-        if (marker) await this.d.unlink(wakeFile).catch(() => {});
         state.prompt_ledger = this.d.recordPrompt(state, {
           key,
           kind: "wake",
           sessionID: entry.sessionID,
         });
-        state.last_prompt_at = Date.now();
         state.metrics = this.d.recordMetric(state.metrics, { rescues: 1, recoveries: 1 });
         await this.saveStateSafe(root, state);
         await this.refreshBrief(entry.sessionID, root, state.last_checks ?? []);
@@ -49,6 +47,14 @@ export const wake = {
           sessionID: entry.sessionID,
           text: "[MISSION WAKE] An external watchdog saw this mission running and quiet. Continue from the durable state in .mission/.",
           delivery: "queue",
+        });
+        // Only consume the marker and reset the rescue clock once delivery
+        // succeeded; otherwise the host helper loses its only signal.
+        if (marker) await this.d.unlink(wakeFile).catch(() => {});
+        await this.serialize(root, async () => {
+          const fresh = await this.d.loadState(root);
+          fresh.last_prompt_at = Date.now();
+          await this.saveStateSafe(root, fresh);
         });
         await this.journal(
           root,

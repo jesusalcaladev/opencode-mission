@@ -25,6 +25,7 @@ export const reviews = {
       text: this.d.combineReviews(first, second),
       at: new Date().toISOString(),
     };
+    state.metrics = this.d.recordMetric(state.metrics, "reviews", 2);
     await this.saveStateSafe(root, state);
     await this.journal(
       root,

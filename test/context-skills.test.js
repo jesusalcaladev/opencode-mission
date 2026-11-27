@@ -100,7 +100,7 @@ test("worker briefs carry retry history and role briefs carry role context", () 
 
 test("skills are registered with absolute paths and are opt-out-able", async () => {
   const defs = await skillDefinitions();
-  assert.equal(defs.length, 4);
+  assert.equal(defs.length, 5);
   for (const skill of defs) {
     assert.ok(path.isAbsolute(skill.path));
     assert.ok(skill.content.length > 50);
@@ -120,7 +120,7 @@ test("skills are registered with absolute paths and are opt-out-able", async () 
   };
   const registration = await registerSkills(ctx);
   assert.ok(registration);
-  assert.equal(added.length, 4);
+  assert.equal(added.length, 5);
   assert.equal(await registerSkills(ctx, { enabled: false }), null);
   assert.equal(await registerSkills({}), null);
 });

@@ -17,6 +17,12 @@ nudged back to work. A mission that is genuinely impossible declares `blocked` w
 
 `<workspace>/.mission/`
 
+`<workspace>` is the directory the user launched `/mission start <objective>` from:
+the mission edits the real project, not a detached sandbox. `workspaceMode: "sandbox"`
+is opt-in and is used automatically for parallel missions. A session binding is
+scoped to that directory, so a mission from another project is never reused by
+`mission_*` tools or by the TUI.
+
 | File                      | Purpose                                                                                                                                                                   |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `mission.md`              | Frontmatter (`id`, `max_turns`, `budget_usd`, `stall_after_turns`) + objective and non-goals                                                                              |
@@ -24,6 +30,9 @@ nudged back to work. A mission that is genuinely impossible declares `blocked` w
 | `tasks.json`              | `{version, tasks:[{id, subject, status, blocked_by, verify}]}`. `verify` is the check id whose green state completes the task — the harness, not the model, marks it done |
 | `state.json`              | Durable supervisor state: status, turn, cost, budget, last checks, strategy tier, last verdict, finish reason                                                             |
 | `charter.md`              | Immutable goal + acceptance criteria. Never rewritten by the supervisor                                                                                                   |
+| `discovery/<area>.md`     | Read-only recon report per area (architecture, quality, toolchain, risks). Reused on resume; never rewritten by the model                                                 |
+| `blueprint.md`            | Architect output: milestones, file ownership, build order and the fenced JSON machine plan                                                                                |
+| `blueprint.json`          | The machine plan extracted from the blueprint that passed validation (audit trail)                                                                                        |
 | `memory.md`               | **Distilled** decisions, constraints, file map and discarded approaches, capped at ~4k characters. This is what the model sees                                            |
 | `summary.md`              | Regenerated short summary of `memory.md`, written on the compaction schedule                                                                                              |
 | `journal.md`              | Raw append-only audit log; source material for distillation, not injected wholesale                                                                                       |
@@ -84,10 +93,42 @@ JSON plan: objective, executable checks, and tasks with `files`, `verify` and
 `blocked_by`. `planner.js` validates it — unsafe commands, cycles, bad ids, path
 traversal and missing verify checks are rejected with a retry. If the model cannot be
 reached, `fallbackPlan` derives real checks from the objective itself (a named file,
-a named string); it never uses a vacuous check such as `node --test` with zero tests.
+a named string); if there are none, `detectToolchain` reads the project manifests and
+uses their real `test`/`build`/`lint` commands. If no real criterion exists at all the
+mission is **refused** rather than started with a vacuous check such as "any file
+exists". A check that was already green at start only completes a task after the
+worker reports it done with evidence, so a pre-existing green suite cannot be claimed
+as new work. `tasks.json` and `progress.json` are reconciled on every report.
 
 A path instead of prose keeps the legacy behavior: `/mission start ./some/dir` runs a
 pre-authored `.mission/` directory unchanged.
+
+### Discovery → blueprint → plan
+
+Before planning, the harness runs an engineering prelude that is part of the
+contract, not a prompt trick:
+
+1. **Recon** — `reconAgents` (default 3, max 4) read-only agents inspect disjoint
+   areas in parallel and report real files, constraints, risks and machine-readable
+   `CHECK:`/`TASK:` proposals. Each report is written to
+   `.mission/discovery/<area>.md`. A cached report is reused verbatim, so a resume
+   or a second mission in the same workspace never pays twice.
+2. **Blueprint** — one architect agent receives every report (and the recon memo in
+   its brief) and must return markdown plus exactly one fenced JSON plan. The
+   markdown goes to `blueprint.md`, the plan to `blueprint.json`.
+3. **Validation** — the blueprint plan passes the same `normalizePlan` rules as a
+   planner plan: 1–24 safe non-vacuous checks, 1–120 tasks, sequential ids, acyclic
+   dependencies, every task `verify` naming an existing check. An invalid plan is
+   rejected and the normal planner path runs with the blueprint as context.
+   If there is no structured blueprint, the harness harvests the recon
+   `CHECK:`/`TASK:` proposals deterministically.
+
+The recon memo is injected into every later brief inside fixed markers, so it is
+replaced on a re-plan instead of being appended again. A mission planned this way
+sets `discovery_done`, skips the duplicate investigator stage, and runs the goal
+audit before completion (`goal_audit: false` in the blueprint opts out).
+
+`/mission start --quick` (or `discovery: false`) uses a single planner pass.
 
 ## Roles in one workspace
 
@@ -160,7 +201,7 @@ the opt-out for deterministic runs.
 
 ## Campaign mode and definition of done
 
-A campaign plan may declare up to 60 tasks, 24 checks, `milestones`, a
+A campaign plan may declare up to 120 tasks, 30 checks, `milestones`, a
 `definition_of_done` and a `requirements` list. Every requirement names at least
 one check id. Completion is legal only when **all checks are green, all tasks are
 verified and every requirement is covered by a green check**. A goal auditor can
@@ -261,6 +302,18 @@ model shows $0 — `max_turns` and `max_wallclock_min` remain the reliable backs
 Model rotation is best-effort: if no alternative with tools and output price < $5/M
 exists, the mission keeps retrying until `max_failures`. A single mission runs in a
 single session at a time; there is no multi-mission scheduler yet.
+
+## Final report
+
+Every terminal state (complete, blocked, aborted) writes `MISSION_REPORT.md` at the
+workspace root. It is generated from durable files only: objective, status and
+finish reason, duration/turns/cost/tokens, a task table with stage/attempts/time,
+a check table with the real commands and results, requirement coverage, recon
+agents and blueprint reference, agents and roles, metric counters, `git diff
+--stat`, dependency changes against the baseline captured at start, research,
+distilled memory, evidence paths and the improvement backlog. A report failure is
+journaled and never changes the mission outcome. `npm run report -- <dir>`
+regenerates it, `--print` writes it to stdout.
 
 ## Porting to zode
 

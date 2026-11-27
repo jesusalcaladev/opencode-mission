@@ -1,7 +1,7 @@
 // Additional eval runners: disk context, host supervisor and model rotation.
 
 import { execFile } from "node:child_process";
-import { readFile, utimes, writeFile } from "node:fs/promises";
+import { mkdir, readFile, utimes, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import path from "node:path";
 import { Supervisor } from "../src/supervisor.js";
@@ -139,6 +139,44 @@ export async function runTaskListCase(testCase, base) {
     tasks_disjoint: files.length === new Set(files).size && files.length > 0,
     valid: result.ok,
     prompts: result.errors.join("; "),
+  };
+  const scored = scoreCase(testCase.expect ?? {}, actual);
+  sup.dispose();
+  return { id: testCase.id, ...scored, ...actual };
+}
+
+/// Discovery prelude end-to-end: cached recon + architect blueprint must produce
+/// a large validated plan (checks + tasks) without dispatching any model session.
+export async function runDiscoveryCase(testCase, base) {
+  const root = path.join(base, "mission");
+  const dir = path.join(root, ".mission");
+  await mkdir(path.join(dir, "discovery"), { recursive: true });
+  for (const [area, text] of Object.entries(testCase.recon ?? {}))
+    await writeTextAtomic(path.join(dir, "discovery", `${area}.md`), `${String(text)}\n`);
+  const doc = ["# Blueprint", "```json", JSON.stringify(testCase.blueprint ?? {}), "```"].join(
+    "\n"
+  );
+  await writeTextAtomic(path.join(dir, "blueprint.md"), `${doc}\n`);
+
+  const ctx = fakeCtx(base, testCase);
+  const sup = new Supervisor(ctx, { enableWorkers: false, enableRoles: true, missionsRoot: base });
+  const reply = await sup.planAndStart("lead", testCase.objective ?? testCase.id, {
+    discovery: true,
+    reconAgents: Number(testCase.reconAgents) || undefined,
+  });
+  const state = await loadState(root);
+  const tasks = await loadTasks(root);
+  const criteria = JSON.parse(await readFile(path.join(dir, "criteria.json"), "utf8"));
+  const actual = {
+    status: "discovery",
+    checks_total: Array.isArray(criteria?.checks) ? criteria.checks.length : 0,
+    tasks_count: tasks.length,
+    discovery_done: state.discovery_done === true,
+    goal_audit: state.goal_audit === true,
+    recon_agents: Number(state.recon_agents) || 0,
+    report_path: String(state.report_path ?? ""),
+    journal: reply,
+    prompts: ctx.prompts.join("\n"),
   };
   const scored = scoreCase(testCase.expect ?? {}, actual);
   sup.dispose();

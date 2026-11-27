@@ -63,6 +63,7 @@ export const telemetry = {
       `Next task: ${task ? `#${task.id} ${task.subject}` : "none"}`,
       `Strategy tier: ${state.strategy_tier} · failures: ${state.failures ?? 0} · finish reason: ${state.finish_reason ?? "none"}`,
       `Chain: ${state.chain_index ?? 0}/${state.chain_total ?? 0} · extensions: ${state.extensions ?? 0}/${state.max_extensions ?? 3}`,
+      `Discovery: ${state.discovery_done ? `${state.recon_agents ?? 0} recon agent(s) + blueprint` : "off"} · report: ${state.report_path || "written on finish"}`,
       `Workspace: ${this.effectiveRoot(root, state)}${state.worktree_branch ? ` (${state.worktree_branch})` : ""}`,
     ].join("\n");
   },

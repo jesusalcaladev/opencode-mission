@@ -5,6 +5,7 @@ import {
   nextItem,
   markItemDone,
   chainDecision,
+  autoExtendDecision,
   applyExtension,
   DEFAULT_MAX_EXTENSIONS,
 } from "../src/mission/chain.js";
@@ -65,11 +66,39 @@ test("chain: EXTEND only applies to budget stops and respects the ceiling", () =
 });
 
 test("chain: an extension grows the active budgets", () => {
-  const before = { extensions: 0, max_turns: 16, max_wallclock_min: 30, max_writes: 100 };
+  const before = {
+    extensions: 0,
+    max_turns: 16,
+    max_wallclock_min: 30,
+    max_writes: 100,
+    budget_usd: 5,
+  };
   const after = applyExtension(before);
   assert.equal(after.extensions, 1);
   assert.ok(after.max_turns > before.max_turns);
   assert.ok(after.max_wallclock_min > before.max_wallclock_min);
   assert.ok(after.max_writes > before.max_writes);
+  assert.ok(after.budget_usd > before.budget_usd, "EXTEND must lift a soft budget ceiling");
   assert.equal(before.extensions, 0);
+});
+
+test("chain: a stalled relentless mission extends instead of aborting", () => {
+  const state = {
+    auto_extend: true,
+    never_give_up: true,
+    max_extensions: 0,
+    cost_usd: 1,
+    hard_budget_usd: 0,
+  };
+  const decision = { type: "stop", reason: "max-turns" };
+  const extended = autoExtendDecision({ decision, state, progress: false });
+  assert.equal(extended.type, "extend");
+  assert.equal(extended.reason, "stalled");
+  const standard = autoExtendDecision({
+    decision,
+    state: { ...state, never_give_up: false },
+    progress: false,
+  });
+  assert.equal(standard.type, "stop");
+  assert.equal(standard.reason, "stalled");
 });

@@ -4,7 +4,14 @@
 const AGENT_RUN_LIMIT = 200;
 
 export const rolesPipeline = {
-  async dispatchRoleStage(sessionID, root, role, promptText, modelOverride = null) {
+  async dispatchRoleStage(
+    sessionID,
+    root,
+    role,
+    promptText,
+    modelOverride = null,
+    timeoutMs = null
+  ) {
     const chosen =
       modelOverride ?? this.modelForRole(role) ?? this.pickFreeModel(await this.modelCatalog());
     const created = await this.ctx.session.create({
@@ -19,10 +26,21 @@ export const rolesPipeline = {
     this.workers.set(id, { root, taskId: 0, leadID: sessionID, role });
     this.roles.set(id, role);
     this.knownWorkers.add(id);
-    this.briefs.set(
-      id,
-      await this.buildRoleBrief(root, await this.d.loadState(root), role, promptText)
-    );
+    try {
+      this.briefs.set(
+        id,
+        await this.buildRoleBrief(root, await this.d.loadState(root), role, promptText)
+      );
+    } catch (err) {
+      this.unbind(id);
+      this.workers.delete(id);
+      this.roles.delete(id);
+      this.knownWorkers.delete(id);
+      await this.appendJournal(root, `role ${role} brief failed: ${this.d.shortError(err)}`).catch(
+        () => {}
+      );
+      return null;
+    }
     let failure = null;
     try {
       await this.serialize(root, async () => {
@@ -43,7 +61,8 @@ export const rolesPipeline = {
         await this.saveStateSafe(root, s);
       });
       await this.ctx.session.prompt({ sessionID: id, text: promptText, delivery: "queue" });
-      await this.waitWithTimeout(id, Number(this.options.workerTimeoutMs) || 600_000);
+      const budget = Number(timeoutMs) || Number(this.options.workerTimeoutMs) || 600_000;
+      await this.waitWithTimeout(id, budget);
     } catch (err) {
       failure = err;
       await this.journal(root, `role ${role} failed: ${this.d.shortError(err)}`).catch((cause) =>
@@ -71,7 +90,9 @@ export const rolesPipeline = {
 
   async dispatchRoles(sessionID, root, entries) {
     return Promise.all(
-      entries.map(({ role, prompt }) => this.dispatchRoleStage(sessionID, root, role, prompt))
+      entries.map(({ role, prompt, timeoutMs }) =>
+        this.dispatchRoleStage(sessionID, root, role, prompt, null, timeoutMs)
+      )
     );
   },
 
@@ -103,6 +124,18 @@ export const rolesPipeline = {
     }
 
     if (stage === this.d.STAGE.INVESTIGATE) {
+      // Discovery already inspected the project before planning; running the
+      // investigator again would burn turns and produce duplicate findings.
+      if (state.discovery_done) {
+        state.stage = this.d.STAGE.IMPLEMENT;
+        state.phase = this.d.STAGE.IMPLEMENT;
+        await this.journal(
+          root,
+          `recon already done before planning (${state.recon_agents ?? 0} agent(s)); skipping duplicate investigation`
+        );
+        await this.saveStateSafe(root, state);
+        return { type: "continue" };
+      }
       const roles = [
         {
           role: this.d.ROLE.INVESTIGATOR,
@@ -190,10 +223,20 @@ export const rolesPipeline = {
       return this.runGoalAudit(sessionID, root, state, objective, results);
     }
 
-    if (next.decision === "complete" && state.continuous_improvement !== false) {
-      return this.runImproveCycle(sessionID, root, state, results);
+    if (next.decision === "complete") {
+      // The stage machine must not manufacture a second, unguarded completion.
+      const allGreen = Array.isArray(results) && results.length > 0 && results.every((r) => r.ok);
+      const allTasks =
+        Array.isArray(tasks) &&
+        tasks.length > 0 &&
+        tasks.every((t) => t.status === this.d.TASK_STATUS.COMPLETED);
+      if (!allGreen || !allTasks) {
+        await this.journal(root, "stage reached done but checks/tasks are not green; staying open");
+        return { type: "continue", reason: "stage-complete-refused" };
+      }
+      if (state.continuous_improvement !== false)
+        return this.runImproveCycle(sessionID, root, state, results);
     }
-    if (next.decision === "complete") return decision;
     return decision;
   },
 };

@@ -32,9 +32,19 @@ turns) and **task leases** (a dead worker's task is reclaimed instead of stuck f
 
 ## Features
 
-- **Natural-language intake** — `/mission start build a CLI with three tests` creates
-  a workspace, plans checks and tasks, and starts the run. A path instead of prose runs
-  a pre-authored `.mission/` directory.
+- **Discovery before planning** — `/mission start` first dispatches 3–4 read-only
+  recon agents in parallel (architecture, tests, toolchain, risks), collects their
+  reports in `.mission/discovery/`, and a single architect turns them into a
+  blueprint with milestones, file ownership and a machine plan in
+  `.mission/blueprint.md`. The harness validates that plan like any other, then
+  hands it to parallel implementers. `--quick` skips the prelude.
+- **Natural-language intake** — `/mission start build a CLI with three tests` writes
+  `.mission/` in the **current directory** (your real project), plans checks and tasks,
+  and starts the run. A path instead of prose runs a pre-authored `.mission/` directory.
+- **No fake completion** — if the planner fails, the harness uses the project's own
+  `npm test` / `build` / `lint` / `pytest` / `go test` commands as criteria. If no real
+  criterion can be found, the mission refuses to start instead of passing a vacuous
+  "any file exists" check.
 - **Parallel sub-agents** — one child session per task, grouped into waves of disjoint
   file sets. The lead coordinates; the harness verifies.
 - **Automatic model selection** — OpenCode's default is replaced by a free,
@@ -54,15 +64,22 @@ turns) and **task leases** (a dead worker's task is reclaimed instead of stuck f
 - **Shared durable context** — a bounded `context-pack` rebuilt from disk feeds the
   lead, every worker and every role. Workers get their check status, requirements,
   facts, discarded approaches and previous errors on retries; quiet workers get a
-  refreshed brief when re-admitted. Four optional skills carry the static workflow
-  contract (`enableSkills: false` disables them).
+  refreshed brief when re-admitted. Five optional skills carry the static workflow
+  contract, including the recon→blueprint engineering loop (`enableSkills: false`
+  disables them).
+- **Detailed final report** — every terminal state writes `MISSION_REPORT.md` in the
+  project: what was done, how it was verified, agents/models/cost, files changed,
+  dependencies added, decisions and next steps. `npm run report -- <dir>`
+  regenerates it from durable files at any time.
 - **Budget forecast** — the TUI extrapolates cost/tokens/minutes from the mission's
   own history and flags projected hard-budget/token overruns; the persistent
   mission queue is also visible in the dashboard.
 - **Mission Control TUI** — a live HUD above the prompt, a sidebar card, footer
   badges, a session panel and a full-screen dashboard. On empty sessions it shows
   a clear call to action instead of nothing. `ctrl+shift+m` opens the dashboard.
-- **Campaign Mode** — plans up to 60 tasks / 24 checks / explicit requirements,
+- **Campaign Mode** — plans up to 120 tasks / 30 checks / explicit requirements;
+  `/mission start --big` targets 15–30 checks and 20–40 tasks with a verified
+  deployment gate,
   auto-extends budgets while verified progress continues, audits the actual goal
   before completion, and stops only at hard wall-clock/cost caps or `STOP`.
 - **Relentless Mode** — `autonomy: relentless` (or `never_give_up: true`) turns
@@ -122,7 +139,7 @@ Then register it in `~/.config/opencode/opencode.json`:
     {
       "package": "~/.config/opencode/plugins/opencode-mission",
       "options": {
-        "missionsRoot": "~/missions",
+        "workspaceMode": "project",
         "maxWorkers": 3,
         "model": { "providerID": "opencode", "id": "hy4-flash-free" },
       },
@@ -144,6 +161,8 @@ opencode api get /api/plugin | grep mission
 
 ```text
 /mission start Create alpha.txt containing alpha and beta.txt containing beta
+/mission start --long build the whole game engine and keep going for hours
+/mission start --quick write only the README (skip recon/blueprint)
 /mission parallel build alpha CLI | build beta CLI | write the docs
 /mission queue add write the docs p:5
 /mission queue list
@@ -157,8 +176,12 @@ opencode api get /api/plugin | grep mission
 ```
 
 The plugin prints the generated plan, schedules the workers, and then verifies the
-criteria itself. Generated missions live under `missionsRoot` (default:
-`<current directory>/missions`).
+criteria itself. By default the mission works **in the directory you launched it from**:
+its control files are in `<project>/.mission/` and checks run against your real files.
+Set `"workspaceMode": "sandbox"` to get isolated workspaces under `missionsRoot`
+(used automatically for `/mission parallel`). A mission never follows you into another
+project: switching directories makes the previous mission inactive until you resume it
+with `/mission resume <dir>`.
 
 To run the bundled example instead:
 
@@ -179,7 +202,13 @@ the mission auto-extends until the engine is actually complete.
 /user: "/mission start <objective>"
         |
         v
-planner (model) -> validated criteria.json + tasks.json
+recon agents (3-4, parallel, read-only) -> .mission/discovery/*.md
+        |
+        v
+architect (1 agent) -> .mission/blueprint.md + machine plan
+        |
+        v
+harness validation -> criteria.json + tasks.json (many checks, many tasks)
         |
         v
 worker sessions (parallel waves) ---> mission_write / mission_task_done
@@ -238,30 +267,34 @@ alone still opens the "New mission" prompt. `/mission-new` is an alias; the bare
 
 ### Plugin options (`opencode.jsonc`)
 
-| Option                            | Default          | Meaning                                                 |
-| --------------------------------- | ---------------- | ------------------------------------------------------- |
-| `model`                           | auto             | `{providerID, id}` forced for planner, lead and workers |
-| `plannerModel`                    | auto             | Override for the planning call only                     |
-| `fallbackModel`                   | auto             | Override used on quota errors                           |
-| `fastModel`                       | auto             | Model for read-only roles (investigator/reviewer)       |
-| `modelsByRole`                    | unset            | Per-role model map, e.g. `{ "reviewer": {...} }`        |
-| `missionsRoot`                    | `<cwd>/missions` | Where generated mission workspaces live                 |
-| `maxWorkers`                      | `3`              | Max parallel sub-agents per wave (no hard cap)          |
-| `wakeIntervalMs`                  | `15000`          | How often the internal WAKE watcher scans               |
-| `parallelSlots`                   | `8`              | Max running missions from the persistent queue          |
-| `autoQueue`                       | `false`          | Auto-launch queued missions on a timer                  |
-| `queueIntervalMs`                 | `30000`          | Queue scheduler interval                                |
-| `maxQueueAttempts`                | `3`              | Failed queue launches before an entry is marked failed  |
-| `maxWorkerRevives`                | `1` / `∞`        | Quiet-worker re-admits (unlimited in relentless)        |
-| `imageModel`                      | auto             | `{providerID, id}` used by `mission_image_generate`     |
-| `workerTimeoutMs`                 | `600000`         | Max wait for a read-only role agent                     |
-| `enableWorkers`                   | `true`           | Set to `false` for single-agent runs                    |
-| `enableSkills`                    | `true`           | Register the four static mission skills                 |
-| `notifyUrl`                       | unset            | POST terminal-state JSON to this URL                    |
-| `MISSION_WEBHOOK_URL`             | unset            | Environment alternative to `notifyUrl`                  |
-| `MISSION_HOST_RESTART_COMMAND`    | unset            | Command used by the opt-in host supervisor              |
-| `MISSION_HOST_RESTART_MAX`        | `3`              | Restarts per window before giving up                    |
-| `MISSION_HOST_RESTART_BACKOFF_MS` | `60000`          | Base exponential backoff                                |
+| Option                            | Default          | Meaning                                                                         |
+| --------------------------------- | ---------------- | ------------------------------------------------------------------------------- |
+| `model`                           | auto             | `{providerID, id}` forced for planner, lead and workers                         |
+| `plannerModel`                    | auto             | Override for the planning call only                                             |
+| `fallbackModel`                   | auto             | Override used on quota errors                                                   |
+| `fastModel`                       | auto             | Model for read-only roles (investigator/reviewer)                               |
+| `modelsByRole`                    | unset            | Per-role model map, e.g. `{ "reviewer": {...} }`                                |
+| `workspaceMode`                   | `project`        | `project` = current directory; `sandbox` = isolated dirs                        |
+| `defaultAutonomy`                 | unset            | `relentless` / `campaign`: every new mission runs unattended (same as `--long`) |
+| `discovery`                       | `true`           | Recon + architect blueprint before planning (`false` = single planner pass)     |
+| `reconAgents`                     | `3`              | Parallel read-only recon agents (1–4 areas)                                     |
+| `missionsRoot`                    | `<cwd>/missions` | Sandbox/queue root (not used for normal `/mission start`)                       |
+| `maxWorkers`                      | `3`              | Max parallel sub-agents per wave (no hard cap)                                  |
+| `wakeIntervalMs`                  | `15000`          | How often the internal WAKE watcher scans                                       |
+| `parallelSlots`                   | `8`              | Max running missions from the persistent queue                                  |
+| `autoQueue`                       | `false`          | Auto-launch queued missions on a timer                                          |
+| `queueIntervalMs`                 | `30000`          | Queue scheduler interval                                                        |
+| `maxQueueAttempts`                | `3`              | Failed queue launches before an entry is marked failed                          |
+| `maxWorkerRevives`                | `1` / `∞`        | Quiet-worker re-admits (unlimited in relentless)                                |
+| `imageModel`                      | auto             | `{providerID, id}` used by `mission_image_generate`                             |
+| `workerTimeoutMs`                 | `600000`         | Max wait for a read-only role agent                                             |
+| `enableWorkers`                   | `true`           | Set to `false` for single-agent runs                                            |
+| `enableSkills`                    | `true`           | Register the four static mission skills                                         |
+| `notifyUrl`                       | unset            | POST terminal-state JSON to this URL                                            |
+| `MISSION_WEBHOOK_URL`             | unset            | Environment alternative to `notifyUrl`                                          |
+| `MISSION_HOST_RESTART_COMMAND`    | unset            | Command used by the opt-in host supervisor                                      |
+| `MISSION_HOST_RESTART_MAX`        | `3`              | Restarts per window before giving up                                            |
+| `MISSION_HOST_RESTART_BACKOFF_MS` | `60000`          | Base exponential backoff                                                        |
 
 ### Mission frontmatter (`.mission/mission.md`)
 
@@ -314,6 +347,10 @@ alone still opens the "New mission" prompt. `/mission-new` is an alias; the bare
   progress.json     task leases: owner, attempts, lease_until, last_error
   roadmap.md        optional checklist of chained missions
   EXTEND            consume to grant one bounded budget extension
+  discovery/*.md    recon reports per area (architecture, quality, toolchain, risks)
+  blueprint.md      architect blueprint (milestones, ownership, build order)
+  blueprint.json    machine plan extracted from the blueprint and validated
+  MISSION_REPORT.md written at the project root on every terminal state
   evidence/*.txt    stdout, stderr, exit code and timing per check
   PAUSE             pause at the next idle boundary (remove + resume to continue)
   STOP              kill switch, checked at every idle boundary
@@ -341,6 +378,7 @@ npm run check          # syntax + architecture guardrails (size, test globals, b
 npm test               # full suite, no network or TUI required
 npm run eval           # end-to-end eval cases through the real supervisor
 npm run doctor -- ./missions/<workspace>  # read-only mission health report
+npm run report -- ./missions/<workspace>  # regenerate MISSION_REPORT.md (--print for stdout)
 npm run eval -- --filter cli-standard --json
 npm run test:watch     # watch tests while developing
 npm run lint           # eslint (strict rules)
@@ -372,7 +410,10 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) before sending changes.
 
 ## Known limitations
 
-- One mission runs in one lead session at a time; there is no parallel multi-mission scheduler.
+- Each mission runs in one lead session; several missions run in parallel only via
+  `/mission parallel` or the persistent queue.
+- The TUI reads durable files: it refreshes every second while a mission is running,
+  but a write that has not reached disk yet is invisible by design.
 - Cost is aggregated across all mission sessions, but unpriced models still report $0.
   The turn/wall-clock ceilings and `hard_budget_usd` remain the reliable backstops.
 - `relentless` removes soft ceilings, not hard ones. No harness can guarantee 100%

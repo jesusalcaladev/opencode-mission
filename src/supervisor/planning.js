@@ -1,158 +1,145 @@
-// planning mixin — extracted from lifecycle.js.
-// All dependencies are reached through this.d (set by the Supervisor).
+// planning mixin — intake flow: recon → blueprint → validated plan → start.
+// Plan persistence lives in plan-files.js. Dependencies come through this.d.
 
-import * as d from "./deps.js";
-const { path, mkdir } = d;
+import path from "node:path";
 
 export const planning = {
-  async writePlanFiles(root, plan, original, _force = false) {
-    const dir = path.join(root, ".mission");
-    await mkdir(path.join(dir, "evidence"), { recursive: true });
-    const s = plan.settings;
-    const frontmatter = [
-      "---",
-      `id: mission-${Date.now().toString(36)}`,
-      `max_turns: ${s.max_turns}`,
-      `budget_usd: ${s.budget_usd}`,
-      `stall_after_turns: 2`,
-      `handoff_every_turns: ${s.handoff_every_turns}`,
-      `max_failures: ${s.max_failures}`,
-      `max_wallclock_min: ${s.max_wallclock_min ?? 0}`,
-      `hard_budget_usd: ${s.hard_budget_usd ?? 0}`,
-      `max_tokens: ${s.max_tokens ?? 0}`,
-      `auto_extend: ${s.auto_extend ?? false}`,
-      `max_extensions: ${s.max_extensions ?? 3}`,
-      `extension_turns: ${s.extension_turns ?? 8}`,
-      `extension_writes: ${s.extension_writes ?? 50}`,
-      `extension_budget_usd: ${s.extension_budget_usd ?? 5}`,
-      `goal_audit: ${s.goal_audit ?? false}`,
-      `max_goal_audits: ${s.max_goal_audits ?? 3}`,
-      `autonomy: ${s.autonomy ?? "standard"}`,
-      `never_give_up: ${s.never_give_up === true}`,
-      `max_task_attempts: ${s.max_task_attempts ?? 3}`,
-      `max_review_attempts: ${s.max_review_attempts ?? 2}`,
-      `mutation_checks: ${s.mutation_checks === true}`,
-      `require_e2e: ${s.require_e2e === true}`,
-      `strict_checks: ${s.strict_checks === true}`,
-      `sandbox: ${s.sandbox === "copy" ? "copy" : "none"}`,
-      `global_memory: ${s.global_memory === true}`,
-      `lease_ms: ${s.lease_ms ?? 300000}`,
-      `worker_timeout_ms: ${s.worker_timeout_ms ?? 1800000}`,
-      `continuous_improvement: ${s.continuous_improvement ?? true}`,
-      `max_improve_cycles: ${s.max_improve_cycles ?? 5}`,
-      `min_impact: ${s.min_impact ?? "medium"}`,
-      `max_writes: ${s.max_writes ?? 0}`,
-      `needs_research: ${plan.needs_research === true}`,
-      `research: ${plan.research === true || plan.needs_research === true}`,
-      `isolation: ${s.isolation}`,
-      "---",
-      plan.objective,
-      "",
-      `Original request: ${original}`,
-      "",
-      "Completion is defined ONLY by criteria.json. All tasks must be verified by the harness.",
-      ...(plan.definition_of_done ?? []).map((d) => `- DONE: ${d}`),
-    ].join("\n");
-    await this.d.writeTextAtomic(path.join(dir, "mission.md"), `${frontmatter}\n`);
-    await this.d.writeJsonAtomic(path.join(dir, "criteria.json"), {
-      version: this.d.VERSION,
-      checks: plan.checks,
-      requirements: plan.requirements ?? [],
-      milestones: plan.milestones ?? [],
-      definition_of_done: plan.definition_of_done ?? [],
-    });
-    const planned = plan.tasks.map((t) => ({ ...t, status: "pending" }));
-    await this.d.writeJsonAtomic(path.join(dir, "tasks.json"), {
-      version: this.d.VERSION,
-      tasks: planned,
-    });
-    // progress.json may have been seeded by this.d.ensureMission from the placeholder
-    // task. Keep leases in sync with the actual plan.
-    await this.saveProgressSafe(root, this.d.fromTasks(planned));
-    const state = await this.d.loadState(root);
-    Object.assign(state, s, {
-      status: this.d.STATUS.RUNNING,
-      turn: 0,
-      cost_usd: 0,
-      failures: 0,
-      writes: 0,
-      last_replan_turn: 0,
-      best_green: 0,
-      tasks_done: 0,
-      last_checks: [],
-      last_verdict: null,
-      test_hashes: null,
-      last_commit: null,
-      session_id: null,
-      started_at: null,
-      finished_at: null,
-      finish_reason: null,
-      task_reports: {},
-      worker_sessions: [],
-      review_attempts: 0,
-      goal_audits: 0,
-      cost_extra_usd: 0,
-    });
-    await this.saveStateSafe(root, state);
-  },
-
-  async planAndStart(sessionID, objective) {
+  async planAndStart(sessionID, objective, options = {}) {
     const clean = String(objective ?? "").trim();
     if (clean.length < 3)
       return "Give an objective after /mission start, e.g. /mission start build a tiny CLI with three tests";
 
-    const slug =
-      clean
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-|-$/g, "")
-        .split("-")
-        .slice(0, 4)
-        .join("-") || "mission";
-    const base = this.missionsRoot ?? path.join(this.ctx.location.directory, "missions");
-    const root = path.join(base, `${slug}-${Date.now().toString(36)}`);
+    const root = this.workspaceFor(clean, options);
+    const inProject = root === this.projectDirectory();
+    const createdMarker = !(await this.d.fileExists(path.join(root, ".mission", "state.json")));
+    if (inProject && !createdMarker) {
+      const busy = await this.d.loadState(root).catch(() => null);
+      if (busy?.status === this.d.STATUS.RUNNING)
+        return `A mission is already running in ${root}. Use /mission status, /mission stop or /mission resume first.`;
+    }
     await this.d.ensureMission(root, { objective: clean });
 
-    let generated;
-    try {
-      const model = await this.pickPlannerModel();
-      const generate = this.options.generate ?? (async () => "");
-      generated = await this.d.createPlan(
-        clean,
-        root,
-        async (args) => {
-          const out = await generate(args);
-          this.noteGeneration(root, out);
-          return out;
-        },
-        { model, attempts: 2 }
-      );
-    } catch (err) {
-      // A planner/model failure must never leave a half-authored mission:
-      // `.mission/` with only state.json renders as "(no objective)" and 0/0
-      // checks in the TUI. The fallback plan always has real criteria/tasks.
-      generated = {
-        plan: this.d.fallbackPlan(clean, root),
-        source: "fallback-after-error",
-        errors: [err instanceof Error ? err.message : String(err)],
-      };
+    // Discovery: parallel read-only recon agents, then one architect blueprint.
+    // The blueprint's structured plan is validated exactly like a planner plan;
+    // if anything fails we fall back to the single planner call, which now
+    // receives the blueprint as context.
+    const blueprint = this.discoveryEnabled(options)
+      ? await this.runDiscovery(sessionID, root, clean, options)
+      : null;
+
+    // Recon artifacts remain on disk even when the architect failed. They are
+    // the deterministic source for plan repair, so read them directly instead
+    // of letting a missing blueprint collapse the mission to two build checks.
+    const reports = [];
+    for (const area of this.d.reconAreas(options.reconAgents ?? this.options.reconAgents)) {
+      const file = path.join(root, ".mission", "discovery", `${area.id}.md`);
+      const text = await this.d.readText(file, "");
+      if (text.trim()) reports.push({ area: area.id, text });
+    }
+    if (reports.length === 0 && Array.isArray(blueprint?.reports))
+      reports.push(...blueprint.reports);
+    const parsedProposals = this.d.parseProposals(reports);
+    const proposals = { ...parsedProposals, reports };
+    const bigFlag = options.big === true || this.options.bigMission === true ? true : undefined;
+    const sizing = this.d.missionSizing({
+      objective: clean,
+      options: { ...options, big: bigFlag },
+      proposals,
+    });
+
+    let generated = null;
+    if (blueprint?.plan) {
+      const parsed = this.d.normalizePlan(blueprint.plan, clean, root, { proposals, sizing });
+      if (parsed.ok) {
+        generated = { plan: parsed.plan, source: "blueprint", errors: [] };
+      } else {
+        await this.journal(
+          root,
+          `blueprint plan rejected: ${parsed.errors.join("; ")}; falling back to the planner`
+        );
+      }
+    }
+    if (!generated) {
+      const extra = blueprint?.markdown
+        ? `BLUEPRINT (architect, built from recon)\n${blueprint.markdown}`.slice(0, 9000)
+        : "";
+      try {
+        const model = await this.pickPlannerModel();
+        const generate = this.options.generate ?? (async () => "");
+        generated = await this.d.createPlan(
+          clean,
+          root,
+          async (args) => {
+            const out = await generate(args);
+            this.noteGeneration(root, out);
+            return out;
+          },
+          { model, attempts: 2, extra }
+        );
+      } catch (err) {
+        generated = await this.d.safeFallbackPlan(clean, root, [
+          err instanceof Error ? err.message : String(err),
+        ]);
+        generated.source = "fallback-after-error";
+      }
+    }
+    // Repair any plan (including the model planner's) up to the sizing target.
+    const sized = this.d.normalizePlan(generated.plan, clean, root, { proposals, sizing });
+    if (sized.ok) {
+      generated.plan = sized.plan;
+      generated.errors = [...(generated.errors ?? []), ...sized.errors];
+    } else if (sizing.big && generated.plan?.checks?.length) {
+      await this.journal(root, `plan repair unavailable: ${sized.errors.join("; ")}`);
+    }
+    const autonomy = options.autonomy ?? this.defaultAutonomy;
+    if (autonomy)
+      generated.plan.settings = this.unattendedSettings(generated.plan.settings, autonomy);
+    // Unattended runs used to drop both loops; a large objective must keep the
+    // goal audit and the deployment/e2e requirement.
+    if (sizing.big) {
+      generated.plan.settings.goal_audit = true;
+      generated.plan.settings.require_e2e = true;
+    }
+    if (generated.plan?.unstartable || (generated.plan?.checks?.length ?? 0) === 0) {
+      await this.removePartial(root, createdMarker, inProject);
+      return [
+        `Could not create a mission: ${generated.plan?.reason ?? "no real criteria could be defined"}.`,
+        ...(generated.errors?.length ? [`Planner: ${generated.errors.join("; ")}`] : []),
+        "Write real checks in .mission/criteria.json (or a package.json test script) and run /mission start <dir>.",
+      ].join("\n");
     }
     try {
       await this.writePlanFiles(root, generated.plan, clean);
     } catch (err) {
-      // If even the minimal files cannot be written, remove the workspace we
-      // just created rather than leaving a broken folder behind.
-      await this.d
-        .rm(root, { recursive: true, force: true })
-        .catch((err) => this.warn(root, "partial workspace cleanup failed", err));
+      await this.removePartial(root, createdMarker, inProject);
       const why = err instanceof Error ? err.message : String(err);
       return `Could not create the mission (${why}). No partial workspace was left behind.`;
     }
+    const state = await this.d.loadState(root);
+    if (blueprint) {
+      state.discovery_done = true;
+      state.recon_agents = blueprint.reports.length;
+      state.blueprint = "blueprint.md";
+      // A mission planned from inspected reality gets the extra goal audit
+      // before completion, unless the architect explicitly disabled it.
+      if (blueprint.plan?.settings?.goal_audit !== false) state.goal_audit = true;
+    }
+    // Durable sizing + deployment gate. Only the harness writes these.
+    state.sizing = sizing;
+    state.require_deploy = sizing.big;
+    state.deploy = { verified: false, checks: generated.plan.checks.map((c) => c.id) };
+    await this.saveStateSafe(root, state);
+
     const status = await this.start(sessionID, root, { objective: clean, autoDispatch: true });
     const waves = this.d.wavesFor(generated.plan.tasks, this.maxWorkers);
     return [
       status,
       `Plan source: ${generated.source}${generated.errors?.length ? ` (${generated.errors.join("; ")})` : ""}`,
+      ...(blueprint
+        ? [
+            `Discovery: ${blueprint.reports.length} recon report(s) · blueprint ${blueprint.plan ? "plan accepted" : "markdown only"} · goal audit before completion`,
+          ]
+        : []),
       `Objective: ${generated.plan.objective}`,
       `Criteria: ${generated.plan.checks.map((c) => c.id).join(", ")}`,
       `${generated.plan.tasks.length} task(s) scheduled in ${waves.length} parallel wave(s) · max ${this.maxWorkers} workers`,
@@ -160,7 +147,7 @@ export const planning = {
     ].join("\n");
   },
 
-  async planAndResearch(sessionID, question) {
+  async planAndResearch(sessionID, question, options = {}) {
     const clean = String(question ?? "").trim();
     if (clean.length < 3) return "Give a research question after /mission research.";
     const slug =
@@ -171,8 +158,7 @@ export const planning = {
         .split("-")
         .slice(0, 4)
         .join("-") || "research";
-    const base = this.missionsRoot ?? path.join(this.ctx.location.directory, "missions");
-    const root = path.join(base, `research-${slug}-${Date.now().toString(36)}`);
+    const root = this.workspaceFor(`research ${slug}`, options);
     const plan = this.d.researchPlan(clean, root);
     await this.d.ensureMission(root, { objective: plan.objective });
     await this.writePlanFiles(root, plan, clean);
@@ -194,7 +180,28 @@ export const planning = {
       await this.journal(root, "chain exhausted: all roadmap items are done");
       return false;
     }
-    const plan = this.d.fallbackPlan(item.title, root);
+    const generated = await this.d.safeFallbackPlan(item.title, root);
+    const plan = generated.plan;
+    // A roadmap title is rarely a verifiable criterion. Reuse the mission's
+    // existing real checks instead of inventing an "anything exists" probe.
+    const existing = await this.d.loadCriteria(root);
+    const checks = (existing?.checks ?? []).filter((c) => c?.id && this.d.safeCheckCmd(c.cmd));
+    if (!checks.length) {
+      await this.journal(root, `chain skipped '${item.title}': no real criteria`);
+      return false;
+    }
+    plan.checks = checks;
+    plan.tasks = [
+      {
+        id: 1,
+        subject: item.title.slice(0, 160),
+        files: [],
+        verify: checks[0].id,
+        blocked_by: [],
+      },
+    ];
+    plan.requirements = existing.requirements ?? [];
+    plan.unstartable = false;
     await this.writePlanFiles(root, plan, item.title, true);
     const state = await this.d.loadState(root);
     Object.assign(state, {

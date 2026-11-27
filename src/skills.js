@@ -32,6 +32,12 @@ const CATALOG = [
     description: "Harness-owned definition of done before declaring a verdict",
     file: "mission-verdict.md",
   },
+  {
+    id: "mission-blueprint",
+    name: "mission-blueprint",
+    description: "Engineering loop: recon, architect blueprint, verified tasks, review, report",
+    file: "mission-blueprint.md",
+  },
 ];
 
 export async function skillDefinitions(base = SKILLS_DIR) {

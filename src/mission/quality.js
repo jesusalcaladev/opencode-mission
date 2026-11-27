@@ -1,5 +1,24 @@
 // Quality guards that decide whether a green check actually proves work.
 
+/// A "done" report is credible when its own check is green AND either the
+/// check transitioned from red or the worker actually wrote files. This stops
+/// a pre-existing green suite from being claimed as completed work.
+export function credibleReport({
+  status = "done",
+  verify = "",
+  check = null,
+  baseline = {},
+  writes = 0,
+} = {}) {
+  if (status !== "done") return true;
+  if (!verify) return true;
+  if (!check?.ok) return false;
+  const wasGreenFromStart = Object.prototype.hasOwnProperty.call(baseline ?? {}, verify)
+    ? baseline[verify] === true
+    : true;
+  return !(wasGreenFromStart && (Number(writes) || 0) === 0);
+}
+
 export function mutationSettings(state = {}) {
   if (state.mutation_checks === false) return false;
   return state.mutation_checks === true || state.never_give_up === true;

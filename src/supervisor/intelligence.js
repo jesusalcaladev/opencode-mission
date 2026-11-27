@@ -197,6 +197,9 @@ export const intelligence = {
       parsed.plan.checks.map((c) => c.id),
       true
     );
+    // Reports belong to the previous attempt/scope; a re-plan must not inherit
+    // their credit for a rewritten task id.
+    state.task_reports = {};
     const next = this.d.afterReplan(state, state.turn);
     Object.assign(state, next);
     await this.saveStateSafe(root, state);

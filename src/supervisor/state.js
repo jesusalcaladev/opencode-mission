@@ -4,8 +4,14 @@ import { AsyncLocalStorage } from "node:async_hooks";
 const writeScope = new AsyncLocalStorage();
 
 export const state = {
-  rootFor(sessionID) {
-    return this.bySession.get(sessionID) ?? null;
+  rootFor(sessionID, directory = null) {
+    const root = this.bySession.get(sessionID);
+    if (!root) return null;
+    const bound = this.boundDirectory.get(sessionID);
+    if (!bound) return root;
+    const here = directory ? this.d.path.resolve(directory) : this.currentDirectory;
+    if (here && this.d.path.resolve(bound) !== here) return null;
+    return root;
   },
 
   effectiveRoot(root, state) {

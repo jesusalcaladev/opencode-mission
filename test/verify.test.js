@@ -54,6 +54,12 @@ test("gitCommit commits a verified unit and is a no-op when nothing changed", as
     const second = await gitCommit(root, "mission(test): turn 2", ["cli.js"]);
     assert.equal(second.ok, true);
     assert.equal(second.sha, null);
+    // Unrelated untracked files must not turn a no-change checkpoint into a
+    // failure (git phrases it "nothing added to commit but untracked files").
+    await writeFile(path.join(root, "notes.txt"), "unrelated\n");
+    const third = await gitCommit(root, "mission(test): turn 3", ["cli.js"]);
+    assert.equal(third.ok, true);
+    assert.equal(third.reason, "no changes");
   } finally {
     await rm(root, { recursive: true, force: true });
   }

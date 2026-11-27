@@ -16,21 +16,9 @@ export const tools = {
     const role = this.roles.get(sessionID) ?? this.d.ROLE.IMPLEMENTER;
     if (!this.d.canWrite(role))
       return `Role '${role}' is read-only in this mission. Only the implementer writes files.`;
-    const normalized = rel.replace(/\\/g, "/").replace(/^\.\//, "");
-    const worker = this.workers.get(sessionID);
-    if (worker?.taskId) {
-      const owner = this.d.lockedBy(this.fileLocks, normalized);
-      if (owner !== null && owner !== worker.taskId)
-        return `Refusing to write ${normalized}: file is locked by task #${owner}.`;
-      const assigned =
-        (await this.d.loadTasks(root)).find((t) => t.id === worker.taskId)?.files ?? [];
-      if (
-        assigned.length > 0 &&
-        !assigned.some((f) => normalized === f || normalized.startsWith(`${f}/`))
-      ) {
-        return `Refusing to write outside task #${worker.taskId} files: ${normalized}`;
-      }
-    }
+    const guard = await this.writeGuard(sessionID, root, rel);
+    if (!guard.ok) return guard.error;
+    const normalized = guard.normalized;
     // The harness owns the contract. Allowing the model to rewrite criteria,
     // tasks or state would let it define "done" as whatever it wrote.
     if (normalized === ".mission" || normalized.startsWith(".mission/")) {
@@ -45,6 +33,7 @@ export const tools = {
     await this.serialize(root, async () => {
       const fresh = await this.d.loadState(root);
       fresh.writes = (fresh.writes ?? 0) + 1;
+      fresh.last_write_at = Date.now();
       fresh.metrics = this.d.recordMetric(fresh.metrics, "writes", 1);
       await this.saveStateSafe(root, fresh);
     });
@@ -162,17 +151,47 @@ export const tools = {
     return this.serialize(root, async () => {
       const state = await this.d.loadState(root);
       const progress = await this.d.loadProgress(root);
+      const stored = await this.d.loadTasks(root);
+      const task = stored.find((t) => t.id === id);
+      const lease = progress.find((p) => Number(p?.id) === id);
+      if (!this.d.canReport(lease, sessionID, worker?.taskId === id ? worker.taskId : 0))
+        return `No active lease for task #${id} (owner ${lease?.owner ?? "none"}); report rejected.`;
+      const cached = (state.last_checks ?? []).find((r) => r.id === task?.verify);
+      const cacheStale =
+        cached && Number(state.last_write_at ?? 0) > Number(state.last_checks_at ?? 0);
+      let check = cached && !cacheStale ? cached : null;
+      if (!check && task?.verify) {
+        const criteria = await this.d.loadCriteria(root);
+        const own = {
+          ...criteria,
+          checks: (criteria.checks ?? []).filter((c) => c.id === task.verify),
+        };
+        if (own.checks.length) {
+          const workRoot = this.effectiveRoot(root, state);
+          const [fresh] = await this.d.runChecks(workRoot, own, {
+            strict: state.strict_checks === true,
+            sandbox: state.sandbox,
+          });
+          check = fresh;
+        }
+      }
+      const credible = this.d.credibleReport({
+        status,
+        verify: task?.verify ?? "",
+        check,
+        baseline: state.check_baseline ?? {},
+        writes: state.writes ?? 0,
+      });
       if (!state.task_reports || typeof state.task_reports !== "object") state.task_reports = {};
       state.task_reports[String(id)] = {
-        status,
-        summary: summary.slice(0, 1000),
+        status: credible ? status : "failed",
+        summary: credible ? summary.slice(0, 1000) : `verify check ${task.verify} is red`,
         evidence,
         at: new Date().toISOString(),
         by: worker?.taskId === id ? "worker" : "lead",
+        bySession: sessionID,
+        attempt: Number(lease?.attempts) || 0,
       };
-      const task = (await this.d.loadTasks(root)).find((t) => t.id === id);
-      const check = state.last_checks?.find((r) => r.id === task?.verify);
-      const credible = status !== "done" || !task?.verify || Boolean(check?.ok);
       if (credible) {
         if (status === "done") this.d.release(progress, id, this.d.TASK_STATUS.COMPLETED);
         else this.d.fail(progress, id, summary, Date.now(), this.taskAttemptLimit(state));
@@ -185,7 +204,11 @@ export const tools = {
           this.taskAttemptLimit(state)
         );
       }
-      await Promise.all([this.saveStateSafe(root, state), this.saveProgressSafe(root, progress)]);
+      await Promise.all([
+        this.saveStateSafe(root, state),
+        this.saveProgressSafe(root, progress),
+        this.saveTasksSafe(root, this.d.syncTasks(progress, stored)),
+      ]);
       await this.d.appendJournal(
         root,
         credible

@@ -10,7 +10,10 @@ import { toolDefinitions } from "./tool-definitions.js";
 import { registerSkills } from "./skills.js";
 
 const HELP = [
-  "/mission start <what to do>   Plan the objective, then run it autonomously with parallel workers",
+  "/mission start <what to do>   Run a verified mission in the CURRENT directory (your project)",
+  "/mission start --long <what>  Relentless: keep working until genuinely done (unattended)",
+  "/mission start --big <what>   Large plan: 15-30 checks, 20-40 tasks, verified deploy",
+  "/mission start --quick <what> Skip the recon/blueprint prelude (single planner pass)",
   "/mission start <dir>          Start a pre-authored mission in an existing directory",
   "/mission parallel A | B | C   Start up to 8 independent missions in parallel",
   "/mission queue add A [p:5]   Queue a mission (priority); use list/run/clear",
@@ -46,8 +49,12 @@ export default Plugin.define({
       plannerModel: ctx.options?.plannerModel,
       maxWorkers: ctx.options?.maxWorkers,
       missionsRoot: ctx.options?.missionsRoot,
+      workspaceMode: ctx.options?.workspaceMode,
       enableWorkers: ctx.options?.enableWorkers,
       enableChaining: ctx.options?.enableChaining,
+      defaultAutonomy: ctx.options?.defaultAutonomy,
+      discovery: ctx.options?.discovery,
+      reconAgents: ctx.options?.reconAgents,
       rescueIntervalMs: ctx.options?.rescueIntervalMs,
       generate: async ({ prompt, model }) => {
         const out = await ctx.experimental.generate.text({ prompt, model });
@@ -98,11 +105,22 @@ export default Plugin.define({
                 reply = HELP;
                 break;
               case "start": {
-                const explicitPath = looksLikePath(arg);
+                const quick = /^--(quick|fast|no-discovery)\s+/i.exec(arg);
+                const rest = quick ? arg.slice(quick[0].length) : arg;
+                const long = /^--(long|relentless|campaign)\s+/.exec(rest);
+                const afterLong = long ? rest.slice(long[0].length) : rest;
+                const big = /^--big\s+/i.exec(afterLong);
+                const cleanArg = big ? afterLong.slice(big[0].length) : afterLong;
+                const autonomy = long ? (long[1] === "campaign" ? "campaign" : "relentless") : null;
+                const explicitPath = looksLikePath(cleanArg);
                 if (explicitPath) {
-                  reply = await supervisor.start(sessionID, path.resolve(expandHome(arg)));
-                } else if (arg) {
-                  reply = await supervisor.planAndStart(sessionID, arg);
+                  reply = await supervisor.start(sessionID, path.resolve(expandHome(cleanArg)));
+                } else if (cleanArg) {
+                  reply = await supervisor.planAndStart(sessionID, cleanArg, {
+                    autonomy,
+                    ...(big ? { big: true } : {}),
+                    ...(quick ? { discovery: false } : {}),
+                  });
                 } else {
                   reply = `Missing objective.\n${HELP}`;
                 }
@@ -148,7 +166,7 @@ export default Plugin.define({
                 break;
               }
               case "resume": {
-                const root = arg || supervisor.rootFor(sessionID) || ctx.location.directory;
+                const root = arg || supervisor.rootFor(sessionID) || supervisor.currentDirectory;
                 reply = await supervisor.resume(sessionID, root);
                 break;
               }

@@ -9,6 +9,7 @@ import { SidebarCard } from "./tui/components";
 import { MODEL_KEY, initialModel, type MissionModel } from "./tui/types";
 import { MissionDashboard, MissionPanel } from "./tui/dashboard";
 import { missionKeymapLayer } from "./tui/keymap";
+import { createRefresher, startPolling } from "./tui/refresh.js";
 
 export default Plugin.define({
   id: "mission.cli",
@@ -16,7 +17,7 @@ export default Plugin.define({
     const [model, setModel] = context.storage.memory<MissionModel>(MODEL_KEY, {
       initial: initialModel(),
     });
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    let kickTimer: ReturnType<typeof setTimeout> | undefined;
     let stopped = false;
 
     // One TUI process owns many sessions. The route is the focused terminal;
@@ -33,17 +34,40 @@ export default Plugin.define({
 
     let activeSessionID = activeSession();
 
-    const refresh = async (sessionID = activeSessionID) => {
-      const next = await loadTuiModel({
-        missionsRoot: context.options?.missionsRoot ?? process.env.MISSIONS_ROOT,
-        sessionID,
-      });
-      setModel((draft) => {
-        draft.snapshot = next.snapshot;
-        draft.missions = next.missions;
-        draft.queue = next.queue ?? [];
-        draft.updatedAt = next.updatedAt;
-      });
+    // One coalesced reader: a failed load can no longer stop the loop, and an
+    // older read can no longer overwrite a newer snapshot.
+    const refresher = createRefresher({
+      load: () =>
+        loadTuiModel({
+          missionsRoot: context.options?.missionsRoot ?? process.env.MISSIONS_ROOT,
+          sessionID: activeSessionID,
+          directory: process.cwd(),
+        }),
+      apply: (next) =>
+        setModel((draft) => {
+          draft.snapshot = next.snapshot;
+          draft.missions = next.missions;
+          draft.queue = next.queue ?? [];
+          draft.updatedAt = next.updatedAt;
+        }),
+    });
+
+    const refresh = () => refresher.run();
+    // A route change may have NO session (home screen); that must clear the
+    // scope instead of keeping the previous terminal's mission on screen.
+    const refreshFor = (sessionID: string | undefined) => {
+      activeSessionID = sessionID;
+      return refresher.run();
+    };
+
+    // Data events are cheap and frequent: coalesce them into one extra read.
+    const kick = () => {
+      if (stopped || kickTimer) return;
+      kickTimer = setTimeout(() => {
+        kickTimer = undefined;
+        void refresh();
+      }, 150);
+      (kickTimer as any)?.unref?.();
     };
 
     // Commands must act on the mission of the terminal they were invoked from.
@@ -55,26 +79,26 @@ export default Plugin.define({
       return snap.sessionID === sid ? snap : null;
     };
 
-    const schedule = () => {
-      if (stopped) return;
-      const recent = model.missions.some((m) => Date.now() - m.updatedAt < 600_000);
-      const queued = model.queue.some((q) => q.status === "pending");
-      const delay = model.snapshot?.status === "running" ? 1000 : recent || queued ? 2000 : 5000;
-      timer = setTimeout(async () => {
-        await refresh();
-        schedule();
-      }, delay);
-      (timer as any)?.unref?.();
-    };
+    const stopPolling = startPolling({
+      tick: () => refresh(),
+      delay: () => {
+        if (model.snapshot?.status === "running") return 1000;
+        const recent = model.missions.some((m) => Date.now() - m.updatedAt < 600_000);
+        const queued = model.queue.some((q) => q.status === "pending");
+        return recent || queued ? 2000 : 5000;
+      },
+      isStopped: () => stopped,
+      setTimer: (fn: () => void, ms: number) => setTimeout(fn, ms),
+      clearTimer: (handle: any) => clearTimeout(handle),
+    });
 
-    void refresh().then(schedule);
+    void refresh();
     createEffect(() => {
       const sid = activeSession();
       if (sid === activeSessionID) return;
-      activeSessionID = sid;
-      void refresh(sid);
+      void refreshFor(sid);
     });
-    const eventStop = context.data.listen(() => void refresh());
+    const eventStop = context.data.listen(kick);
 
     const location = context.location ?? context.data.location.default();
 
@@ -147,7 +171,10 @@ export default Plugin.define({
 
     const dispose = () => {
       stopped = true;
-      if (timer) clearTimeout(timer);
+      stopPolling();
+      refresher.dispose();
+      if (kickTimer) clearTimeout(kickTimer);
+      kickTimer = undefined;
       eventStop();
       for (const slot of slots) slot?.();
       unregisterPage?.();

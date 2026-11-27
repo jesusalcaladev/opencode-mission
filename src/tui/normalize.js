@@ -3,8 +3,8 @@ import { TASK_STATUS } from "../mission/state.js";
 import { computeProgress as sharedProgress, ratio } from "../mission/progress.js";
 
 export { ratio };
-export function computeProgress(checks, tasks, requirements, floor = 0) {
-  return sharedProgress(checks, tasks, requirements, floor);
+export function computeProgress(checks, tasks, requirements, floor = 0, deploy = null) {
+  return sharedProgress(checks, tasks, requirements, floor, deploy);
 }
 
 export function normalizeChecks(state) {
@@ -18,26 +18,40 @@ export function normalizeChecks(state) {
   }));
 }
 
-export function normalizeTasks(tasks) {
-  return (Array.isArray(tasks) ? tasks : []).map((t, i) => ({
-    id: Number(t?.id) || i + 1,
-    subject: String(t?.subject ?? `Task ${i + 1}`).slice(0, 160),
-    status: ["pending", "in_progress", "completed", "failed"].includes(t?.status)
-      ? t.status
-      : TASK_STATUS.PENDING,
-    verify: String(t?.verify ?? ""),
-    files: Array.isArray(t?.files) ? t.files : [],
-    blocked_by: Array.isArray(t?.blocked_by) ? t.blocked_by : [],
-    milestone: String(t?.milestone ?? ""),
-    stage: String(t?.stage ?? t?.milestone ?? ""),
-    attempts: Number(t?.attempts) || 0,
-    started_at: Number(t?.started_at) || 0,
-    finished_at: Number(t?.finished_at) || 0,
-    duration_ms:
-      Number(t?.finished_at) > 0 && Number(t?.started_at) > 0
-        ? Number(t.finished_at) - Number(t.started_at)
-        : 0,
-  }));
+/// Tasks are split across two durable files: tasks.json owns the plan and
+/// progress.json owns the lease (owner, attempts, start/finish timestamps,
+/// status). The TUI used to read timings from tasks.json only, where they never
+/// exist, so every task showed "attempts 0" and no duration even while workers
+/// were running. Merge both views, with progress winning for lease state.
+export function normalizeTasks(tasks, progress = []) {
+  const leased = new Map((Array.isArray(progress) ? progress : []).map((p) => [Number(p?.id), p]));
+  return (Array.isArray(tasks) ? tasks : []).map((t, i) => {
+    const id = Number(t?.id) || i + 1;
+    const lease = leased.get(id) ?? {};
+    const status = ["pending", "in_progress", "completed", "failed"].includes(lease.status)
+      ? lease.status
+      : ["pending", "in_progress", "completed", "failed"].includes(t?.status)
+        ? t.status
+        : TASK_STATUS.PENDING;
+    const started_at = Number(lease.started_at) || Number(t?.started_at) || 0;
+    const finished_at = Number(lease.finished_at) || Number(t?.finished_at) || 0;
+    return {
+      id,
+      subject: String(t?.subject ?? `Task ${i + 1}`).slice(0, 160),
+      status,
+      verify: String(t?.verify ?? ""),
+      files: Array.isArray(t?.files) ? t.files : [],
+      blocked_by: Array.isArray(t?.blocked_by) ? t.blocked_by : [],
+      milestone: String(t?.milestone ?? ""),
+      stage: String(t?.stage ?? t?.milestone ?? ""),
+      attempts: Number(lease.attempts) || 0,
+      owner: String(lease.owner ?? ""),
+      last_error: String(lease.last_error ?? "").slice(0, 200),
+      started_at,
+      finished_at,
+      duration_ms: finished_at > 0 && started_at > 0 ? finished_at - started_at : 0,
+    };
+  });
 }
 
 export function normalizeAgents(state, progress) {

@@ -46,6 +46,11 @@ export const turn = {
 
       await this.updateMissionCost(root, state, sessionID);
       let { results, tasks, baseline } = await this.verify(root, workRoot);
+      // verify() persists the deploy evidence and task checkpoints through the
+      // serialize queue; reload it before deciding, or the later save of this
+      // in-memory state would drop it and the mission could never complete.
+      const afterVerify = await this.d.loadState(root);
+      state.deploy = afterVerify.deploy ?? state.deploy;
       state.check_baseline = baseline;
       if (await this.maybeSplitStuckTask(root, state, tasks)) {
         ({ results, tasks, baseline } = await this.verify(root, workRoot));
@@ -157,14 +162,26 @@ export const turn = {
       }
 
       const targetSession = await this.maybeHandoff(sessionID, root, state);
-      state.last_prompt_at = Date.now();
+      // Do NOT stamp last_prompt_at here: a failed or duplicate nudge would
+      // reset the rescue clock and blind every recovery layer.
       await this.saveStateSafe(root, state);
+      // A handoff can change `state.session_id`; republish so the TUI rebinds.
+      await this.publishRegistry(
+        root,
+        state,
+        this.d.objectiveOf(await this.readMission(root).catch(() => ""))
+      );
       await this.refreshBrief(targetSession, root, results).catch(async (err) => {
         await this.journal(root, `brief refresh failed: ${this.d.shortError(err)}`).catch(() => {});
       });
 
       const nudge = this.buildNudge({ sessionID, targetSession, state, results, tasks });
       if (!(await this.deliverNudge(root, sessionID, targetSession, state, nudge))) return;
+      await this.serialize(root, async () => {
+        const delivered = await this.d.loadState(root);
+        delivered.last_prompt_at = Date.now();
+        await this.saveStateSafe(root, delivered);
+      });
     } catch (err) {
       await this.recoverFromError(sessionID, err);
     } finally {

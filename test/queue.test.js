@@ -91,7 +91,19 @@ test("load: eight parallel missions get independent sessions and workspaces", as
   try {
     const ids = Array.from({ length: 8 }, (_, i) => `lead-${i}`);
     const ctx = fakeCtx({ ids });
-    const sup = new Supervisor(ctx, { missionsRoot: base, maxWorkers: 3 });
+    const plan = JSON.stringify({
+      objective: "Build a tiny CLI",
+      checks: [
+        { id: "unit", cmd: "node --test", expect: "exit0", timeout_ms: 30000, kind: "unit" },
+      ],
+      tasks: [{ id: 1, subject: "Build a tiny CLI", files: [], verify: "unit", blocked_by: [] }],
+      settings: { max_turns: 4, budget_usd: 1 },
+    });
+    const sup = new Supervisor(ctx, {
+      missionsRoot: base,
+      maxWorkers: 3,
+      generate: async () => plan,
+    });
     const objectives = Array.from({ length: 8 }, (_, i) => `Build tiny CLI number ${i}`);
     const reply = await sup.startParallel("original", objectives.join(" | "));
     assert.match(reply, /Started 8 mission\(s\)/);

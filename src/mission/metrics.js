@@ -22,6 +22,8 @@ export const METRIC_KEYS = Object.freeze([
   "writes",
   "researchCalls",
   "goalAudits",
+  "reviews",
+  "reconAgents",
 ]);
 
 export const initialMetrics = () => Object.fromEntries(METRIC_KEYS.map((key) => [key, 0]));

@@ -126,6 +126,13 @@ export function SidebarCard(props: {
               }
             />
             <Stat label="tasks" value={`${snap().tasksDone}/${snap().tasksTotal}`} />
+            <Show when={snap().require_deploy}>
+              <Stat
+                label="deploy"
+                value={snap().deployVerified ? "verified" : "pending"}
+                color={snap().deployVerified ? g.success : g.warning}
+              />
+            </Show>
             <Stat
               label="agents"
               value={String(snap().agents.length)}

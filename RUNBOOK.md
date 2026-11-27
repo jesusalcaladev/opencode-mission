@@ -12,6 +12,20 @@ Use a **path** instead of prose to resume a pre-authored mission:
 /mission resume ./missions/build-a-cli-1795312553
 ```
 
+`/mission start` runs the engineering prelude first: 3–4 read-only recon agents,
+then one architect that writes `.mission/blueprint.md` and the machine plan. The
+harness validates that plan before any implementer starts, reuses cached recon on a
+resume, and runs the goal audit before completion. Use `--quick` only for trivial
+tasks where recon would cost more than it saves.
+
+When the mission ends, `MISSION_REPORT.md` appears in the project root. Regenerate
+it at any time (also while running):
+
+```sh
+npm run report -- ./missions/<workspace>
+npm run report -- ./missions/<workspace> --print
+```
+
 ## Budgets that stop a run
 
 Set these in `.mission/mission.md` frontmatter (the planner writes defaults):
@@ -201,8 +215,8 @@ it with `strict_checks: true`. Default `none` preserves existing criteria.
 
 ## Skills vs. brief
 
-Four skills (`mission-workflow`, `mission-review`, `mission-research`,
-`mission-verdict`) describe **how** to work; they are static and registered with
+Five skills (`mission-workflow`, `mission-review`, `mission-research`,
+`mission-verdict`, `mission-blueprint`) describe **how** to work; they are static and registered with
 OpenCode unless `enableSkills: false`. The injected MISSION BRIEF carries **what is
 true right now** (disk state, facts, memory, journal, checks, retry history). Never
 put dynamic mission facts into a skill: it would go stale. Workers and roles receive

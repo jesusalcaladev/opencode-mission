@@ -422,8 +422,10 @@ test("supervisor: a done report with a red verify check is rejected and retried"
     assert.match(refused, /Report rejected/);
     assert.equal((await loadProgress(root))[0].attempts, 1);
 
+    await writeFile(path.join(root, "done.txt"), "");
     const green = await loadState(root);
     green.last_checks = [{ id: "done", ok: true, summary: "exit 0" }];
+    green.writes = 1;
     await saveState(root, green);
     const accepted = await sup.toolTaskDone("ses_test", {
       id: 1,
@@ -536,7 +538,11 @@ test("pipeline: high severity review blocks completion, clean review allows it",
     state.stage = "review";
     state.stage_reports = { review: { text: "SEVERITY: low — style only", at: "" } };
     assert.equal(
-      (await sup.runRolePipeline("ses_test", root, state, tasks, [], { type: "complete" })).type,
+      (
+        await sup.runRolePipeline("ses_test", root, state, tasks, [{ id: "done", ok: true }], {
+          type: "complete",
+        })
+      ).type,
       "complete"
     );
     sup.dispose();

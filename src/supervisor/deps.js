@@ -8,11 +8,13 @@ export { createHash } from "node:crypto";
 export { default as os } from "node:os";
 export * from "../mission.js";
 export { runChecks, workspaceStamp, criteriaSignature } from "../checks.js";
-export { checkTestIntegrity, createWorktree, gitCommit, gitRevert } from "../verify.js";
+export { checkTestIntegrity, createWorktree, gitCommit, gitRevert, gitSummary } from "../verify.js";
 export {
   createPlan,
   fallbackPlan,
+  safeFallbackPlan,
   normalizePlan,
+  normalizeSettings,
   validateMonotonic,
   safeCheckCmd,
 } from "../planner.js";

@@ -26,7 +26,9 @@ const NUMERIC = [
   "last_progress_turn",
   "last_prompt_at",
   "last_checks_at",
+  "last_write_at",
   "review_attempts",
+  "recon_agents",
   "goal_audits",
   "max_goal_audits",
   "improve_cycles",
@@ -61,7 +63,14 @@ const OBJECTS = [
   "check_cache",
   "check_baseline",
   "test_hashes",
+  "sizing",
+  "deploy",
 ];
+
+// Optional object-valued keys where `null` means "not captured yet" and must not
+// be normalized to `{}` (an empty dependency baseline would report every package
+// as newly installed).
+const NULLABLE_OBJECTS = ["deps_baseline", "sizing", "deploy"];
 
 export function stateProblems(raw = {}) {
   const problems = [];
@@ -95,6 +104,11 @@ export function normalizeState(raw = {}) {
   for (const key of ARRAYS) if (!Array.isArray(out[key])) out[key] = [];
   for (const key of OBJECTS)
     if (!out[key] || typeof out[key] !== "object" || Array.isArray(out[key])) out[key] = {};
+  for (const key of NULLABLE_OBJECTS) {
+    if (out[key] === undefined) out[key] = base[key];
+    else if (out[key] !== null && (typeof out[key] !== "object" || Array.isArray(out[key])))
+      out[key] = null;
+  }
   if (!Object.values(STATUS).includes(out.status)) out.status = base.status;
   return out;
 }

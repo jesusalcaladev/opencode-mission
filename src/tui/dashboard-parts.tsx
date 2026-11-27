@@ -43,6 +43,16 @@ export function Header(props: { snapshot: MissionSnapshot }) {
           {s().checksGreen}/{s().checksTotal} checks · {s().tasksDone}/{s().tasksTotal} tasks ·{" "}
           {s().reqCovered}/{s().reqTotal} reqs
         </text>
+        <Show when={s().sizing?.big}>
+          <text fg={g.faint}>
+            big plan · target {s().sizing!.targetChecks} checks / {s().sizing!.targetTasks} tasks
+          </text>
+        </Show>
+        <Show when={s().require_deploy}>
+          <text fg={s().deployVerified ? g.success : g.warning}>
+            deploy {s().deployVerified ? "verified" : "pending"}
+          </text>
+        </Show>
       </box>
       <box flexDirection="row" gap={2}>
         <text fg={g.faint}>
@@ -122,6 +132,13 @@ export function DashboardBody(props: {
             <Stat label="workspace" value={truncate(s().root, 30)} />
             <Stat label="session" value={shortID(s().sessionID, 12)} />
             <Stat label="finish" value={s().finish_reason || "—"} />
+            <Stat
+              label="discovery"
+              value={s().discovery_done ? `${s().recon_agents} recon + blueprint` : "off"}
+            />
+            <Show when={s().report_path}>
+              <Stat label="report" value={s().report_path} />
+            </Show>
             <Show when={s().worktree_branch}>
               <Stat label="branch" value={s().worktree_branch} />
             </Show>

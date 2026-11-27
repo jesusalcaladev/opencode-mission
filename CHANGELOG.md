@@ -8,6 +8,89 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Large-mission sizing**: `/mission start --big <objective>` (or `bigMission: true`)
+  derives a 15–30 check / 20–40 task plan from the objective and recon evidence.
+  Recon `CHECK:`/`TASK:` lines and discovered file paths now repair thin plans
+  instead of letting the harness fall back to two generic build checks.
+- **Verified deployment gate**: large missions complete only when every check is
+  green, every task is done, a real e2e/smoke check passes and the harness has
+  checkpointed the task's files. Progress and the TUI report `deploy verified`
+  instead of showing 100% from pre-existing green checks.
+- **Engineering loop for intake**: `/mission start` now runs recon → blueprint →
+  validated plan before any implementer starts. 3–4 read-only recon agents inspect
+  disjoint areas in parallel (architecture, quality, toolchain, risks) and write
+  `.mission/discovery/<area>.md`; one architect collects them into
+  `.mission/blueprint.md` plus a fenced JSON machine plan; the harness validates
+  that plan with the same `normalizePlan` as any planner plan and only then writes
+  `criteria.json` / `tasks.json`. Cached recon and blueprints are reused on resume,
+  and the recon memo is injected into every later brief inside replaceable markers.
+- `/mission start --quick` (or `discovery: false`) keeps the single planner pass.
+- Deterministic fallback: when there is no structured blueprint, the harness
+  harvests the recon `CHECK:`/`TASK:` proposals into a plan that still passes
+  validation.
+- **`MISSION_REPORT.md`**: every terminal state writes a detailed report in the
+  project — objective, status, duration/turns/cost/tokens, task table with
+  stage/attempts/time, check table with real commands and results, requirement
+  coverage, recon agents and blueprint, agents/roles, metric counters, `git diff
+--stat`, dependency changes against the baseline captured at start, research,
+  distilled memory, evidence paths and the improvement backlog.
+- `npm run report -- <mission-dir> [--print]` regenerates that report from durable
+  files alone, for a running, stopped or finished mission.
+- Discovery missions skip the duplicate investigator stage and run the goal audit
+  before completion (the blueprint can opt out with `goal_audit: false`).
+- New plugin options `discovery` (default `true`) and `reconAgents` (default `3`,
+  max 4); new skill `mission-blueprint`; new eval case `discovery-blueprint`.
+
+### Fixed
+
+- Task credit is honest: verify-less tasks and tasks sharing a check need an
+  explicit worker report; a check that goes red reopens a completed task; a
+  `mission_task_done` report is refused unless the session owns the lease and
+  the task's own check is re-run when writes happened after the last check.
+- Stale reports are dropped on lease reclaim, re-open and re-plan. Check-result
+  caching now includes retries/kind/strict/sandbox and is not reused after task
+  bookkeeping; a cached green can no longer credit an unreported task.
+- The architect actually runs: `runArchitect` called `this.d.dispatchRoleStage`
+  (undefined) instead of the supervisor method, so discovery silently degraded
+  to the planner. Cached blueprints are invalidated when the objective changes.
+- Large missions no longer stall without git or when synthesized tasks have no
+  file ownership; the stage machine cannot emit `complete` with red checks;
+  failed nudges/WAKE no longer reset the rescue clock; `EXTEND` lifts soft
+  budgets and a stalled relentless mission extends instead of aborting.
+- Mission Control no longer goes blank while a mission is running. The cache
+  writer was a standalone function that read `this.boundDirectory` (undefined in
+  ESM) and swallowed the resulting error, so `current.json`/`missions.json`
+  stopped being written and the TUI found no mission. Publication is now a pure
+  module (`src/supervisor/registry.js`), runs after `session_id` and the session
+  binding are assigned and again after handoff/restart, and reports failures
+  instead of hiding them.
+- TUI discovery no longer drops the only mission because the terminal was
+  launched from another directory; strict session scoping now happens at
+  selection time, with a workspace-scoped fallback for stale session IDs.
+- Mission Control no longer freezes: a rejected refresh used to break the
+  `setTimeout` chain for good, so the sidebar and dashboard stopped updating
+  until an unrelated data event arrived. Refresh is now single-flight, coalesced
+  (max one extra read per 150 ms of events) and order-safe; a failed read is
+  reported and retried on the next tick.
+- Task leases are visible in the TUI: attempts, owner, last error, start/finish
+  timing and lease status now come from `progress.json` instead of being read
+  from `tasks.json`, where they never existed (every task showed 0 attempts and
+  no duration while workers were running).
+- `normalizeTask()` preserves unknown task fields, so `stage`/`milestone` (and
+  cost/time hints) are no longer erased the first time `tasks.json` is re-saved.
+
+### Changed
+
+- Verification is faster: the workspace fingerprint no longer walks
+  `node_modules`, `.git`, `dist`, `build`, caches or coverage output before
+  filtering, and file stats run in bounded parallel batches. The post-bookkeeping
+  re-check reuses the cached results when the workspace did not change instead of
+  executing every criterion a second time.
+- New plugin option `defaultAutonomy: "relentless" | "campaign"` makes every new
+  mission unattended by default, without typing `--long`.
+
+### Added
+
 - UI reliability: sidebar shows a compact list of active missions when the
   current session has no scoped mission; queue state is copied on every refresh;
   pointer/running roots are pinned so the discovery cap cannot hide the mission.

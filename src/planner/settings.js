@@ -33,7 +33,7 @@ export function normalizeSettings(raw = {}) {
     require_e2e: s.require_e2e === true || (relentless && s.require_e2e !== false),
     strict_checks: s.strict_checks === true || (relentless && s.strict_checks !== false),
     sandbox: s.sandbox === "copy" ? "copy" : "none",
-    expand_tasks: s.expand_tasks === true || ((campaign || relentless) && s.expand_tasks !== false),
+    expand_tasks: s.expand_tasks !== false,
     global_memory: s.global_memory === true || (relentless && s.global_memory !== false),
     continuous_improvement: s.continuous_improvement !== false,
     max_improve_cycles: clamp(s.max_improve_cycles, 0, 100_000, relentless ? 0 : campaign ? 20 : 5),

@@ -13,10 +13,23 @@ export const recovery = {
     );
     for (const entry of this.registry) {
       const root = this.d.path.resolve(entry.root);
+      const directory = entry.directory ? this.d.path.resolve(entry.directory) : null;
+      // Never rebind a mission that belonged to a different project. Old
+      // registry entries without a directory are only restored when their
+      // root is the current project itself (or lives inside it).
+      if (directory && directory !== this.currentDirectory) continue;
+      if (
+        !directory &&
+        root !== this.currentDirectory &&
+        !root.startsWith(`${this.currentDirectory}${this.d.path.sep}`)
+      )
+        continue;
       this.bind(entry.sessionID, root);
       const state = await this.d.loadState(root);
       for (const id of state.worker_sessions ?? []) this.knownWorkers.add(id);
       await this.recoverStaleWorkers(root, state);
+      // Rehydrated bindings must reach the TUI cache after a restart.
+      await this.publishRegistry(root, state).catch(() => {});
       await this.maybeAutoResume(entry.sessionID, root);
     }
     await this.recoverQueue();
@@ -70,8 +83,9 @@ export const recovery = {
     }
   },
 
-  bind(sessionID, root, isLead = true) {
+  bind(sessionID, root, isLead = true, directory = null) {
     this.bySession.set(sessionID, root);
+    this.boundDirectory.set(sessionID, this.d.path.resolve(directory ?? this.currentDirectory));
     // Only the lead owns the root's idle loop and registry entry. Workers can
     // use mission_* tools, but must never continue the mission themselves.
     if (isLead) this.byRoot.set(root, sessionID);
@@ -81,6 +95,7 @@ export const recovery = {
     const root = this.bySession.get(sessionID);
     if (root) this.byRoot.delete(root);
     this.bySession.delete(sessionID);
+    this.boundDirectory.delete(sessionID);
     this.registry = this.registry.filter((e) => e.sessionID !== sessionID);
   },
 
@@ -88,7 +103,12 @@ export const recovery = {
     this.registry = this.registry.filter((e) => e.sessionID !== sessionID && e.root !== root);
     const now = Math.max(Date.now(), this.registryClock ?? 0);
     this.registryClock = now + 1;
-    this.registry.push({ sessionID, root, updated_at: now });
+    this.registry.push({
+      sessionID,
+      root,
+      directory: this.boundDirectory.get(sessionID) ?? this.currentDirectory,
+      updated_at: now,
+    });
     this.registry = this.d.pruneRegistry(
       this.registry,
       this.registry.map((e) => e.root),

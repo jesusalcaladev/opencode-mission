@@ -27,9 +27,7 @@ export const cacheDir = () =>
   path.join(os.homedir?.() ?? process.env.HOME ?? "", ".cache", "opencode-mission");
 export const pointerPath = () => path.join(cacheDir(), "current.json");
 export const registryPath = () => path.join(cacheDir(), "missions.json");
-
 const readText = (file, fallback = "") => readFile(file, "utf8").catch(() => fallback);
-
 export async function readJson(file, fallback) {
   try {
     return JSON.parse(await readFile(file, "utf8"));
@@ -48,8 +46,7 @@ export async function readRegistry() {
   return Array.isArray(data) ? data.filter((e) => e && typeof e.root === "string") : [];
 }
 
-import { discoverRoots, isMissionRoot } from "./registry.js";
-
+import { discoverRoots, isMissionRoot, projectFilter } from "./registry.js";
 export async function loadMission(root) {
   const dir = path.join(root, ".mission");
   const [state, tasksData, progressData, criteria, missionText, journal, research, hostRestart] =
@@ -65,18 +62,19 @@ export async function loadMission(root) {
     ]);
   const hasState = state && typeof state === "object" && Object.keys(state).length > 0;
   const checks = normalizeChecks(state);
-  const tasks = normalizeTasks(tasksData?.tasks);
   const progress = Array.isArray(progressData)
     ? progressData
     : Array.isArray(progressData?.tasks)
       ? progressData.tasks
       : [];
+  const tasks = normalizeTasks(tasksData?.tasks, progress);
   const requirements = normalizeRequirements(criteria, checks);
   const progressMetrics = computeProgress(
     checks,
     tasks,
     requirements,
-    Number(state?.progress_pct) || 0
+    Number(state?.progress_pct) || 0,
+    state?.deploy ?? null
   );
   const next = selectTask(tasks);
   const started = Number(state?.started_at ? Date.parse(state.started_at) : 0) || 0;
@@ -116,6 +114,9 @@ export async function loadMission(root) {
     started_at: started,
     finished_at: state?.finished_at ? Date.parse(state.finished_at) || 0 : 0,
     finish_reason: String(state?.finish_reason ?? ""),
+    report_path: String(state?.report_path ?? ""),
+    recon_agents: Number(state?.recon_agents) || 0,
+    discovery_done: Boolean(state?.discovery_done),
     last_checks_at: Number(state?.last_checks_at) || 0,
     worktree_branch: String(state?.worktree_branch ?? ""),
     auto_extend: Boolean(state?.auto_extend),
@@ -154,49 +155,24 @@ export async function loadMission(root) {
     over_token_budget: forecast.over_token_budget,
     host_restarts: Number(hostRestart?.attempts) || 0,
     host_restart_error: String(hostRestart?.last_error ?? ""),
+    sizing: state?.sizing ?? null,
+    require_deploy: Boolean(state?.require_deploy),
+    deploy: state?.deploy ?? null,
+    deployVerified: progressMetrics.deployVerified,
     turn_pct: maxTurns > 0 ? Math.round(ratio(turn, maxTurns) * 100) : 0,
     active: status === STATUS.RUNNING || status === STATUS.PAUSED,
     updatedAt: now,
   };
 }
 
-/**
- * Choose the mission a terminal should display.
- *
- * The pointer and the registry are shared, process-global files: whichever
- * mission was started last used to win everywhere. A session must instead see
- * only its own mission. When a sessionID is supplied and that session has no
- * mission we return null (the sidebar shows its empty state), never another
- * terminal's work. The global pointer is consulted only when there is no
- * active session at all, e.g. the dashboard opened from the home screen.
- */
-export function selectSnapshot({ sessionID, pointer, registry = [], snapshots = [] } = {}) {
-  const full = snapshots.filter(Boolean);
-  const byRoot = new Map(full.map((s) => [path.resolve(s.root), s]));
+import { selectSnapshot } from "./select.js";
+export { selectSnapshot };
 
-  if (sessionID) {
-    const owned = registry
-      .filter((e) => e && e.sessionID === sessionID && typeof e.root === "string")
-      .sort((a, b) => Number(b.updated_at || 0) - Number(a.updated_at || 0));
-    for (const entry of owned) {
-      const match = byRoot.get(path.resolve(entry.root));
-      if (match) return match;
-    }
-    // Older missions may predate the registry; their state still names the lead.
-    return full.find((s) => s.sessionID === sessionID) ?? null;
-  }
-
-  if (pointer?.root) {
-    const match = byRoot.get(path.resolve(pointer.root));
-    if (match) return match;
-  }
-  return full.find((s) => s.status === STATUS.RUNNING) ?? full[0] ?? null;
-}
-
-export async function loadTuiModel({ missionsRoot, maxMissions = 12, sessionID } = {}) {
+export async function loadTuiModel({ missionsRoot, maxMissions = 12, sessionID, directory } = {}) {
   const pointer = await readPointer();
   const registry = await readRegistry();
-  const roots = await discoverRoots(missionsRoot, maxMissions);
+  const fromProject = projectFilter(directory);
+  const roots = await discoverRoots(missionsRoot, maxMissions, directory);
   const queueRoot = missionsRoot ?? (pointer?.root ? path.dirname(pointer.root) : null);
   const queueData = queueRoot ? await readJson(path.join(queueRoot, QUEUE_FILE), []) : [];
   const queue = (Array.isArray(queueData) ? queueData : []).slice(0, 12).map((e) => ({
@@ -205,17 +181,16 @@ export async function loadTuiModel({ missionsRoot, maxMissions = 12, sessionID }
     priority: Number(e?.priority) || 0,
     status: String(e?.status ?? "pending"),
   }));
-
   // The active session's workspace must never be dropped by the discovery cap.
   const ownRoots = [
     ...(sessionID
       ? registry
-          .filter((e) => e && e.sessionID === sessionID && typeof e.root === "string")
+          .filter((e) => e?.sessionID === sessionID && typeof e.root === "string" && fromProject(e))
           .map((e) => path.resolve(e.root))
       : []),
-    ...(pointer?.root ? [path.resolve(pointer.root)] : []),
+    ...(pointer?.root && fromProject(pointer) ? [path.resolve(pointer.root)] : []),
     ...registry
-      .filter((e) => e?.status === STATUS.RUNNING && e?.root)
+      .filter((e) => e?.status === STATUS.RUNNING && e?.root && fromProject(e))
       .slice(0, 3)
       .map((e) => path.resolve(e.root)),
   ];
@@ -244,6 +219,6 @@ export async function loadTuiModel({ missionsRoot, maxMissions = 12, sessionID }
       return priority(b) - priority(a) || b.updatedAt - a.updatedAt;
     })
     .slice(0, maxMissions);
-  const snapshot = selectSnapshot({ sessionID, pointer, registry, snapshots: full });
+  const snapshot = selectSnapshot({ sessionID, directory, pointer, registry, snapshots: full });
   return { snapshot, missions, queue, updatedAt: Date.now() };
 }
