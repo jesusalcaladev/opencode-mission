@@ -2,12 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
-import { mkdtemp, writeFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile, rm, stat } from "node:fs/promises";
 import { runCommand } from "../src/checks.js";
 import {
   checkTestIntegrity,
   createWorktree,
   gitCommit,
+  gitRevert,
   hashTests,
   isGitRepo,
 } from "../src/verify.js";
@@ -53,6 +54,24 @@ test("gitCommit commits a verified unit and is a no-op when nothing changed", as
     const second = await gitCommit(root, "mission(test): turn 2", ["cli.js"]);
     assert.equal(second.ok, true);
     assert.equal(second.sha, null);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("gitRevert undoes a checkpoint without a global git identity", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "mission-revert-"));
+  try {
+    await runCommand("git init -q", root, 10000);
+    await writeFile(path.join(root, "a.js"), "one\n");
+    const first = await gitCommit(root, "checkpoint", ["a.js"]);
+    assert.equal(first.ok, true);
+    await writeFile(path.join(root, "a.js"), "two\n");
+    const second = await gitCommit(root, "checkpoint 2", ["a.js"]);
+    assert.equal(second.ok, true);
+    const reverted = await gitRevert(root, second.sha);
+    assert.equal(reverted.ok, true, reverted.reason);
+    assert.equal(await readFile(path.join(root, "a.js"), "utf8"), "one\n");
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -66,6 +66,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- CI failure on fresh runners: `gitCommit`/`gitRevert` now pass an inline
+  identity, so checkpoints work without a global git user. CI also configures
+  a local identity as a belt-and-suspenders measure.
 - Flaky journal rotation test now looks for the newest line across all kept
   files, not only the active journal.
 - `recordWorkerCost` now updates the durable token ledger as well as cost.

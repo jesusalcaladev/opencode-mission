@@ -89,8 +89,10 @@ export async function gitCommit(root, message, paths = []) {
   const add = await runCommand(`git add -- ${quoted}`, root, 15000);
   if (add.code !== 0)
     return { ok: false, reason: `git add failed: ${add.stderr.trim().slice(0, 200)}` };
+  // Inline identity keeps checkpoints working in fresh repos / CI runners that
+  // have no global git user configured. It does not override repo-local config.
   const commit = await runCommand(
-    `git commit --no-gpg-sign -m ${JSON.stringify(message)}`,
+    `git -c user.name=opencode-mission -c user.email=mission@opencode.local commit --no-gpg-sign -m ${JSON.stringify(message)}`,
     root,
     30000
   );
@@ -106,7 +108,11 @@ export async function gitCommit(root, message, paths = []) {
 /// Undo a verified checkpoint without touching later unrelated work.
 export async function gitRevert(root, sha) {
   if (!sha || !(await isGitRepo(root))) return { ok: false, reason: "nothing to revert" };
-  const result = await runCommand(`git revert --no-edit ${JSON.stringify(sha)}`, root, 30000);
+  const result = await runCommand(
+    `git -c user.name=opencode-mission -c user.email=mission@opencode.local revert --no-edit ${JSON.stringify(sha)}`,
+    root,
+    30000
+  );
   const text = `${result.stdout}\n${result.stderr}`;
   return result.code === 0 ? { ok: true, sha } : { ok: false, reason: text.trim().slice(0, 200) };
 }

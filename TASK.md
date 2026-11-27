@@ -61,7 +61,7 @@ hard caps absolutos, `this.d`, archivos <250 líneas, `npm run quality` verde).
 
 ## Fase 5 · Cierre y verificación
 
-- [x] 5.1 `npm run check`, `npm test`, `npm run quality` (coverage ~86.7/69.1/83.2) en verde: 223 tests + 17 evals end-to-end.
+- [x] 5.1 `npm run check`, `npm test`, `npm run quality` (coverage ~86.7/69.1/83.2) en verde: 224 tests + 17 evals end-to-end.
 - [x] 5.2 `ARCHITECTURE.md`, `CONTRACT.md`, `README.md`, `RUNBOOK.md`, `CHANGELOG.md` actualizados.
 - [x] 5.3 Smoke real: `test/smoke.test.js` corre `demos/cli` con checks ejecutables hasta `complete`.
 - [x] 5.4 Invariantes revisados. Módulos nuevos <250 líneas; `tui/model.js` (311) es deuda previa, `roles-pipeline`/`workers` bajaron respecto al baseline.
@@ -160,9 +160,15 @@ hard caps absolutos, `this.d`, archivos <250 líneas, `npm run quality` verde).
 - [x] 16.2 `CONTRIBUTING.md`: cómo añadir rol/skill/eval + rubrica de revisión senior.
 - [x] 16.3 Arquitectura, lint, cobertura y 17 evals en verde.
 
+## Fase 17 · CI en verde
+
+- [x] 17.1 Diagnosticado el fallo real de GitHub Actions: `gitCommit` fallaba sin identidad global de git en runners limpios, por lo que `createWorktree` no encontraba `HEAD`.
+- [x] 17.2 `gitCommit`/`gitRevert` usan identidad inline (`-c user.name/-c user.email`).
+- [x] 17.3 CI configura identidad local además del fix en código.
+
 ## Resultado de ejecución
 
-- 223 tests verdes; `npm run quality` exit 0; `npm run eval` 17/17 exit 0.
+- 224 tests verdes; `npm run quality` exit 0; `npm run eval` 17/17 exit 0.
 - Bug real corregido: `pruneJournalArchives` ordenaba por nombre (sufijo aleatorio) y podía borrar las líneas más nuevas bajo carga; ahora ordena por `mtime`.
 - `demos/cli` tenía un check vacuo (`node --test` sin archivos salía exit 0); ahora exige `contains:pass 3`, por lo que el baseline es rojo y la verificación es real.
 
