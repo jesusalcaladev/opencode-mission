@@ -78,6 +78,7 @@ export const initialState = () => ({
   stall_turns: 0,
   last_verdict: null,
   last_checks: [],
+  review_fingerprints: [],
   session_id: null,
   started_at: new Date().toISOString(),
   finished_at: null,

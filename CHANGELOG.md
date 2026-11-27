@@ -57,6 +57,11 @@ All notable changes to this project are documented here. The format follows
   file ownership; the stage machine cannot emit `complete` with red checks;
   failed nudges/WAKE no longer reset the rescue clock; `EXTEND` lifts soft
   budgets and a stalled relentless mission extends instead of aborting.
+- Handoff keeps the old lead bound until the first prompt lands, and rolls back
+  instead of orphaning a running mission. Repeated review findings no longer
+  reset every task/attempt, unactionable goal gaps no longer burn audit rounds,
+  and quiet-worker revives are bounded and never renew a lease after a failed
+  prompt.
 - Mission Control no longer goes blank while a mission is running. The cache
   writer was a standalone function that read `this.boundDirectory` (undefined in
   ESM) and swallowed the resulting error, so `current.json`/`missions.json`

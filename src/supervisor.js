@@ -49,6 +49,7 @@ export class Supervisor {
     this.stateQueue = new Map();
     this.timers = new Set();
     this.pendingTicks = new Set();
+    this.pendingHandoffs = new Map();
     this.rescueTimer = null;
     this.generationCosts = new Map();
     this.fileLocks = new Map();
@@ -71,10 +72,12 @@ export class Supervisor {
 import { turn } from "./supervisor/turn.js";
 import { telemetry } from "./supervisor/telemetry.js";
 import { taskSplitting } from "./supervisor/task-splitting.js";
+import { handoff } from "./supervisor/handoff.js";
 
 Object.assign(
   Supervisor.prototype,
   decisions,
+  handoff,
   state,
   recovery,
   models,

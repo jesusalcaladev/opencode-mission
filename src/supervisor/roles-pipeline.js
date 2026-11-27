@@ -197,6 +197,13 @@ export const rolesPipeline = {
     if (next.decision === "blocked" && !state.never_give_up)
       return { type: "stop", reason: "review-high" };
     if (next.decision === "retry" || next.decision === "blocked") {
+      const fingerprint = this.d.reviewFingerprint(state.stage_reports?.review?.text);
+      const seenBefore = this.d.alreadyReworked(state, fingerprint);
+      if (seenBefore) {
+        await this.journal(root, "review finding already reworked; keeping task progress");
+        return { type: "continue" };
+      }
+      state.review_fingerprints = [...(state.review_fingerprints ?? []), fingerprint].slice(-10);
       state.review_attempts = next.decision === "blocked" ? 0 : (state.review_attempts ?? 0) + 1;
       state.stage = this.d.STAGE.IMPLEMENT;
       state.phase = this.d.STAGE.IMPLEMENT;

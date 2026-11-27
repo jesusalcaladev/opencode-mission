@@ -47,6 +47,7 @@ const NUMERIC = [
 
 const ARRAYS = [
   "last_checks",
+  "review_fingerprints",
   "history",
   "agent_runs",
   "prompt_ledger",

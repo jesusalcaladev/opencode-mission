@@ -4,6 +4,7 @@
 
 export * from "./mission/state.js";
 export * from "./mission/decide.js";
+export * from "./mission/review.js";
 export * from "./mission/autonomy.js";
 export * from "./mission/recovery.js";
 export * from "./mission/metrics.js";

@@ -62,17 +62,25 @@ export const scheduler = {
       const session = await this.ctx.session.get({ sessionID: w.id }).catch(() => null);
       if (session && (session.time?.idle ?? 0) > (session.time?.busy ?? 0)) {
         const worker = this.workers.get(w.id);
-        const maxRevives = this.options.maxWorkerRevives ?? (state.never_give_up ? Infinity : 1);
+        const maxRevives = Number(this.options.maxWorkerRevives) || 3;
         const revives = worker?.revives ?? 0;
         if (revives < maxRevives && lease && lease.lease_until > Date.now()) {
-          if (worker) worker.revives = revives + 1;
-          await this.ctx.session
+          const delivered = await this.ctx.session
             .prompt({
               sessionID: w.id,
               text: `[MISSION WORKER] Your session went quiet but the lease for task #${w.task.id} is live. Continue the task and call mission_task_done.`,
               delivery: "queue",
             })
-            .catch((err) => this.warn(root, "worker re-admit prompt", err));
+            .then(() => true)
+            .catch((err) => {
+              void this.warn(root, "worker re-admit prompt", err);
+              return false;
+            });
+          if (!delivered) {
+            await this.finalizeWorker(w, leadID, root, state, workRoot);
+            return;
+          }
+          if (worker) worker.revives = revives + 1;
           await this.d.appendJournal(
             root,
             `worker ${w.id} quiet: re-admitted task #${w.task.id} (${revives + 1}/${maxRevives})`

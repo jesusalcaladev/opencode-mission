@@ -26,6 +26,24 @@ export const goalAudit = {
     }
 
     const gaps = this.d.parseGaps(existing).filter((g) => g.text.length > 2);
+    const criteriaData = await this.d.loadCriteria(root);
+    const actionable = gaps
+      .slice(0, 4)
+      .filter(
+        (g) =>
+          (g.check && criteriaData.checks.some((c) => c.id === g.check)) ||
+          this.d.safeCheckCmd(g.cmd)
+      );
+    if (actionable.length === 0) {
+      // An unactionable gap is not work. Counting it would rotate stages and
+      // eventually abort (or loop forever in relentless mode) without creating
+      // anything a worker could do.
+      state.goal_audit_done = true;
+      delete state.stage_reports["goal-auditor"];
+      await this.saveStateSafe(root, state);
+      await this.journal(root, `goal audit: ${gaps.length} gap(s) had no verifiable criterion`);
+      return { type: "continue" };
+    }
     if (gaps.length === 0) {
       state.goal_audits = (state.goal_audits ?? 0) + 1;
       state.metrics = this.d.recordMetric(state.metrics, "goalAudits", 1);
@@ -57,9 +75,9 @@ export const goalAudit = {
 
     const tasks = await this.d.loadTasks(root);
     const progress = await this.d.loadProgress(root);
-    const criteriaData = await this.d.loadCriteria(root);
     let nextId = tasks.reduce((max, t) => Math.max(max, t.id), 0) + 1;
-    for (const gap of gaps.slice(0, 4)) {
+    let added = 0;
+    for (const gap of actionable) {
       let verify =
         gap.check && criteriaData.checks.some((c) => c.id === gap.check) ? gap.check : "";
       if (!verify && gap.cmd && this.d.safeCheckCmd(gap.cmd)) {
@@ -84,6 +102,7 @@ export const goalAudit = {
         verify,
         milestone: "goal-gap",
       });
+      added += 1;
       progress.push({
         id: nextId,
         subject: `Goal gap: ${gap.text.slice(0, 80)}`,
@@ -109,10 +128,7 @@ export const goalAudit = {
       this.d.saveCriteria(root, criteriaData),
       this.saveStateSafe(root, state),
     ]);
-    await this.journal(
-      root,
-      `goal audit added ${Math.max(0, nextId - (tasks.length - Math.min(gaps.length, 4)))} task(s) from gaps`
-    );
+    await this.journal(root, `goal audit added ${added} task(s) from gaps`);
     return { type: "continue" };
   },
 };

@@ -151,35 +151,7 @@ export const decisions = {
   },
 
   async maybeHandoff(sessionID, root, state) {
-    let targetSession = sessionID;
-    const due =
-      state.handoff_every_turns > 0 &&
-      state.turn - (state.last_handoff_turn ?? 0) >= state.handoff_every_turns;
-    if (!due) return targetSession;
-    try {
-      const created = await this.ctx.session.create({
-        title: `mission ${state.id ?? "mission"} · turn ${state.turn}`,
-        location: { directory: this.ctx.location.directory },
-      });
-      const newID = created?.id ?? created?.data?.id;
-      if (!newID) return targetSession;
-      targetSession = newID;
-      state.last_handoff_turn = state.turn;
-      state.session_id = newID;
-      state.handoffs = this.d.recordHandoff(state, sessionID, newID, state.turn);
-      state.metrics = this.d.recordMetric(state.metrics, "handoffs", 1);
-      await this.journal(root, `context handoff ${sessionID} → ${newID}`);
-      this.unbind(sessionID);
-      this.bind(newID, root);
-      await this.persistBinding(newID, root);
-      await this.ctx.session
-        .synthetic({ sessionID, text: `[MISSION HANDOFF] Continuing in session ${newID}.` })
-        .catch((err) => this.warn(root, "handoff notice failed", err));
-    } catch (err) {
-      await this.journal(root, `handoff failed, staying in session: ${this.d.shortError(err)}`);
-      targetSession = sessionID;
-    }
-    return targetSession;
+    return this.beginHandoff(sessionID, root, state);
   },
 
   buildNudge({ sessionID, targetSession, state, results, tasks }) {

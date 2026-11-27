@@ -176,7 +176,11 @@ export const turn = {
       });
 
       const nudge = this.buildNudge({ sessionID, targetSession, state, results, tasks });
-      if (!(await this.deliverNudge(root, sessionID, targetSession, state, nudge))) return;
+      if (!(await this.deliverNudge(root, sessionID, targetSession, state, nudge))) {
+        await this.rollbackHandoff(sessionID, targetSession, root);
+        return;
+      }
+      await this.finalizeHandoff(sessionID, targetSession, root, state);
       await this.serialize(root, async () => {
         const delivered = await this.d.loadState(root);
         delivered.last_prompt_at = Date.now();
