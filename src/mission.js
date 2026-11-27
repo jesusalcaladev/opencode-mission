@@ -29,3 +29,4 @@ export * from "./mission/bootstrap.js";
 export * from "./mission/journal.js";
 export * from "./mission/sandbox.js";
 export * from "./mission/host-restart.js";
+export * from "./mission/context-pack.js";

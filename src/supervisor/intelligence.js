@@ -14,6 +14,7 @@ export const intelligence = {
     if (brief) event.system.push({ type: "text", text: brief });
   },
 
+  /// One disk-backed context pack for the lead, workers and roles.
   globalMemoryPath(root) {
     return this.d.path.join(
       this.missionsRoot ?? this.d.path.dirname(root),

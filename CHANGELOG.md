@@ -32,6 +32,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Unified disk-backed `context-pack` shared by the lead, workers and roles:
+  bounded, task-relevant context with retry history (`attempts`, `last_error`).
+- Four optional skills (`mission-workflow`, `mission-review`, `mission-research`,
+  `mission-verdict`) registered through OpenCode's skill API; `enableSkills: false`
+  disables them. Static contract in skills, dynamic state in briefs.
+- Retry-aware worker prompts and brief refresh when a quiet worker is re-admitted.
+- Actionable schema feedback for `mission_report` by role.
+- Docs consistency check (`npm run check`) and senior review rubric in CONTRIBUTING.
 - Opt-in external host supervisor (`npm run host-supervisor`): reacts only to a
   stale `WAKE`, respects `STOP`/`PAUSE`, exponential backoff and a restart cap,
   writes its own ledger, and never edits mission state. TUI shows restart count.

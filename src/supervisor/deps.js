@@ -27,6 +27,7 @@ export {
   wavesFor,
   workerBrief,
   workerPrompt,
+  roleBrief,
 } from "../team.js";
 export { AUTO_RESUME_AGE_MS, MAX_NUDGE, REGISTRY_KEY, shortError } from "./util.js";
 export {

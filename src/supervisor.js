@@ -26,6 +26,7 @@ import { verification } from "./supervisor/verification.js";
 import { reviews } from "./supervisor/reviews.js";
 import { parallel } from "./supervisor/parallel.js";
 import { queueManager } from "./supervisor/queue-manager.js";
+import { supervisorContext } from "./supervisor/context.js";
 
 export class Supervisor {
   constructor(ctx, options = {}) {
@@ -84,6 +85,7 @@ Object.assign(
   reviews,
   parallel,
   queueManager,
+  supervisorContext,
   turn,
   telemetry,
   taskSplitting

@@ -13,6 +13,7 @@ import {
   loadTasks,
   missionDir,
   queueStats,
+  saveProgress,
   saveState,
   scoreCase,
   writeTextAtomic,
@@ -195,6 +196,43 @@ async function runMission(testCase, base, maxTurns) {
   };
 }
 
+async function runContextCase(testCase, base) {
+  const root = await prepareMission(base, testCase);
+  const ctx = fakeCtx(base, testCase);
+  const sup = new Supervisor(ctx, { enableWorkers: false, enableRoles: false });
+  await sup.start("lead", root);
+  const state = await loadState(root);
+  const stored = testCase.policy?.state ?? {};
+  Object.assign(state, stored);
+  await saveState(root, state);
+  if (testCase.policy?.progress) await saveProgress(root, testCase.policy.progress);
+  await writeTextAtomic(
+    path.join(missionDir(root), "memory.md"),
+    String(stored.memoryText ?? "discarded approach: monolith")
+  );
+  const task = (await loadTasks(root))[0] ?? null;
+  const brief = await sup.buildWorkerBrief(root, await loadState(root), task);
+  const prompt = sup.d.workerPrompt({
+    task,
+    objective: String(testCase.objective ?? "eval"),
+    workspace: root,
+    progress: testCase.policy?.progress ?? [],
+  });
+  const markers = testCase.expectText ?? {};
+  const actual = {
+    status: "context",
+    brief_has_facts: brief.includes(String(markers.facts ?? "does-not-exist")),
+    brief_has_memory: brief.includes(String(markers.memory ?? "does-not-exist")),
+    brief_has_verify: Boolean(task?.verify) && brief.includes(`Verify: ${task.verify}`),
+    prompt_has_retry: /RETRY CONTEXT/.test(prompt),
+    journal: brief,
+    prompts: prompt,
+  };
+  const scored = scoreCase(testCase.expect ?? {}, actual);
+  sup.dispose();
+  return { id: testCase.id, ...scored, ...actual };
+}
+
 async function runHostRestartCase(testCase, base) {
   const exec = promisify(execFile);
   const root = await prepareMission(base, testCase);
@@ -302,6 +340,8 @@ export async function runCase(testCase, maxTurns = 24) {
       queue: () => runQueueCase(testCase, base),
       rotation: () => runRotationCase(testCase, base),
       "host-restart": () => runHostRestartCase(testCase, base),
+      context: () => runContextCase(testCase, base),
+      "retry-context": () => runContextCase(testCase, base),
       mission: () => runMission(testCase, base, maxTurns),
       wake: () => runMission(testCase, base, maxTurns),
     };

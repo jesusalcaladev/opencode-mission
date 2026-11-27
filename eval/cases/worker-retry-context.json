@@ -1,0 +1,37 @@
+{
+  "id": "worker-retry-context",
+  "mode": "retry-context",
+  "objective": "A retried worker gets the previous error and discarded approach",
+  "criteria": [{ "id": "ok", "cmd": "node --version", "expect": "exit0", "timeout_ms": 5000 }],
+  "tasks": [
+    {
+      "id": 1,
+      "subject": "Retry the probe",
+      "status": "pending",
+      "blocked_by": [],
+      "verify": "ok",
+      "files": ["probe.js"]
+    }
+  ],
+  "policy": {
+    "state": { "facts": [], "memoryText": "discarded approach: monolithic state" },
+    "progress": [
+      {
+        "id": 1,
+        "subject": "Retry the probe",
+        "status": "pending",
+        "owner": null,
+        "attempts": 2,
+        "lease_until": 0,
+        "last_error": "node --test failed on snapshots",
+        "verify": "ok"
+      }
+    ]
+  },
+  "expectText": { "memory": "discarded approach" },
+  "expect": {
+    "status": "context",
+    "prompt_has_retry": true,
+    "brief_has_memory": true
+  }
+}

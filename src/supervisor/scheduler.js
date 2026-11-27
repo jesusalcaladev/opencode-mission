@@ -77,6 +77,11 @@ export const scheduler = {
             root,
             `worker ${w.id} quiet: re-admitted task #${w.task.id} (${revives + 1}/${maxRevives})`
           );
+          const freshState = await this.d.loadState(root);
+          const currentTasks = await this.d.loadTasks(root);
+          const currentTask = currentTasks.find((t) => t.id === w.task.id);
+          if (currentTask && this.briefs?.has(w.id))
+            this.briefs.set(w.id, await this.buildWorkerBrief(root, freshState, currentTask));
           const renewed = await this.d.loadProgress(root);
           this.d.renew(
             renewed,

@@ -1,6 +1,10 @@
 // Pure scheduling of parallel workers. Tasks with disjoint file lists and no
 // unfinished dependencies can run in the same wave; the rest wait.
 
+import { buildContextPack, WORKER_LIMITS, taskAttemptLine } from "./mission/context-pack.js";
+
+const packFor = (args, role) => buildContextPack({ ...args, role, limits: WORKER_LIMITS });
+
 export function wavesFor(tasks, maxWorkers = 3) {
   const pending = tasks.map((t) => ({ ...t, blocked_by: [...(t.blocked_by ?? [])] }));
   const done = new Set();
@@ -32,8 +36,9 @@ export function wavesFor(tasks, maxWorkers = 3) {
   return waves;
 }
 
-export function workerPrompt({ task, objective, workspace }) {
+export function workerPrompt({ task, objective, workspace, progress = [] }) {
   const files = Array.isArray(task.files) ? task.files : [];
+  const attempt = taskAttemptLine(progress, task);
   return [
     `[MISSION WORKER · task #${task.id}]`,
     `Mission objective: ${objective}`,
@@ -42,6 +47,8 @@ export function workerPrompt({ task, objective, workspace }) {
     files.length
       ? `Files you own: ${files.join(", ")}`
       : "Files you own: (not declared — stay inside the workspace)",
+    `Verify check: ${task.verify || "(none)"}`,
+    attempt ? `RETRY CONTEXT: ${attempt}` : "",
     "",
     "RULES",
     "- Do ONLY this task. Another worker owns the other tasks.",
@@ -49,19 +56,44 @@ export function workerPrompt({ task, objective, workspace }) {
     "- Do not touch files outside the workspace and do not create a mission verdict.",
     `- Call mission_heartbeat(id=${task.id}) every couple of minutes so your lease is not reclaimed while you work.`,
     `- When finished, call mission_task_done(id=${task.id}, status="done"|"failed", summary="what you did", evidence=["paths/checked"]). A failed report releases the lease so the task can be retried.`,
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
-export function workerBrief({ task, objective, workspace }) {
+export function workerBrief({ task, objective, workspace, context = {}, role = "implementer" }) {
   const files = Array.isArray(task.files) ? task.files : [];
   return [
-    "MISSION WORKER BRIEF (harness-owned)",
+    "MISSION WORKER BRIEF (harness-owned — regenerated from disk)",
     `Objective: ${objective}`,
     `Workspace: ${workspace}`,
     `Assigned task: #${task.id} ${task.subject}`,
     `Owned files: ${files.join(", ") || "(undeclared)"}`,
-    "Finish by calling mission_task_done. The lead agent verifies criteria and owns completion.",
+    `Verify: ${task.verify || "(none)"} — the harness runs it, do not declare done yourself.`,
+    "",
+    packFor({ ...context, task }, role),
+    "",
+    "RULES",
+    "- Stay inside your owned files; another worker owns the rest.",
+    "- Call mission_heartbeat while working and mission_task_done when finished.",
+    "- The lead owns the verdict. A red check beats any report.",
   ].join("\n");
+}
+
+export function roleBrief({ role, objective, workspace, prompt = "", context = {} }) {
+  return [
+    `MISSION ${String(role).toUpperCase()} BRIEF (harness-owned — regenerated from disk)`,
+    `Objective: ${objective}`,
+    `Workspace: ${workspace}`,
+    "",
+    prompt,
+    "",
+    packFor(context, role),
+    "",
+    "Report with mission_report. Read-only roles must never edit files.",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 export function investigatorPrompt({ objective, workspace }) {

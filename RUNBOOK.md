@@ -199,6 +199,15 @@ This is a **soft** sandbox (no OS namespaces, no root required): it protects the
 workspace and credentials, not the host from a malicious local binary. Combine
 it with `strict_checks: true`. Default `none` preserves existing criteria.
 
+## Skills vs. brief
+
+Four skills (`mission-workflow`, `mission-review`, `mission-research`,
+`mission-verdict`) describe **how** to work; they are static and registered with
+OpenCode unless `enableSkills: false`. The injected MISSION BRIEF carries **what is
+true right now** (disk state, facts, memory, journal, checks, retry history). Never
+put dynamic mission facts into a skill: it would go stale. Workers and roles receive
+the same bounded context pack as the lead, filtered to their task.
+
 ## Verify the harness itself
 
 ```sh

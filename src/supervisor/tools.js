@@ -89,12 +89,32 @@ export const tools = {
       : "Blocked verdict recorded. The mission will stop after the harness re-runs the checks.";
   },
 
+  /// Actionable schema feedback for stage roles. The text stays human-readable;
+  /// only the machine-parsable contract is checked.
+  validateStageReport(role, text) {
+    if (role === "reviewer" || role === "reviewer2") {
+      if (this.d.parseReview(text).findings.length === 0 && !/no blocking/i.test(text))
+        return "Reviewer report needs 'SEVERITY: high|medium|low …' lines (or 'SEVERITY: low — no blocking findings').";
+    }
+    if (role === "auditor") {
+      if (this.d.parseFindings(text).length === 0 && !/no findings/i.test(text))
+        return "Auditor report needs 'FINDING: impact=… risk=… files=… …' lines (or 'NO FINDINGS').";
+    }
+    if (role === "goal-auditor") {
+      if (this.d.parseGaps(text).length === 0 && !/no gaps/i.test(text))
+        return "Goal auditor report needs 'GAP: requirement=… …' lines (or 'NO GAPS').";
+    }
+    return "";
+  },
+
   async toolReport(sessionID, input) {
     const root = this.rootFor(sessionID);
     if (!root) return "No active mission.";
     const role = this.roles.get(sessionID) ?? String(input?.role ?? "agent");
     const text = String(input?.text ?? "").trim();
     if (text.length < 3) return "report text is required (at least 3 characters).";
+    const validation = this.validateStageReport(role, text);
+    if (validation) return validation;
     return this.serialize(root, async () => {
       const state = await this.d.loadState(root);
       if (!state.stage_reports || typeof state.stage_reports !== "object") state.stage_reports = {};

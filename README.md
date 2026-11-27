@@ -47,6 +47,11 @@ turns) and **task leases** (a dead worker's task is reclaimed instead of stuck f
 - **Continuous improvement** — after the objective is met, an auditor proposes
   real improvements and the harness implements them in bounded cycles until no
   valuable work remains (or a budget stops it).
+- **Shared durable context** — a bounded `context-pack` rebuilt from disk feeds the
+  lead, every worker and every role. Workers get their check status, requirements,
+  facts, discarded approaches and previous errors on retries; quiet workers get a
+  refreshed brief when re-admitted. Four optional skills carry the static workflow
+  contract (`enableSkills: false` disables them).
 - **Budget forecast** — the TUI extrapolates cost/tokens/minutes from the mission's
   own history and flags projected hard-budget/token overruns; the persistent
   mission queue is also visible in the dashboard.
@@ -246,6 +251,7 @@ are aliases.
 | `imageModel`                      | auto             | `{providerID, id}` used by `mission_image_generate`     |
 | `workerTimeoutMs`                 | `600000`         | Max wait for a read-only role agent                     |
 | `enableWorkers`                   | `true`           | Set to `false` for single-agent runs                    |
+| `enableSkills`                    | `true`           | Register the four static mission skills                 |
 | `notifyUrl`                       | unset            | POST terminal-state JSON to this URL                    |
 | `MISSION_WEBHOOK_URL`             | unset            | Environment alternative to `notifyUrl`                  |
 | `MISSION_HOST_RESTART_COMMAND`    | unset            | Command used by the opt-in host supervisor              |
@@ -330,7 +336,12 @@ npm run check          # syntax + architecture guardrails (size, test globals, b
 npm test               # full suite, no network or TUI required
 npm run eval           # end-to-end eval cases through the real supervisor
 npm run eval -- --filter cli-standard --json
-node --test --watch test/*.test.js
+npm run test:watch     # watch tests while developing
+npm run lint           # eslint (strict rules)
+npm run format         # prettier --write .
+npm run format:check   # prettier --check .
+npm run typecheck      # tsc --noEmit (TUI)
+npm run quality        # check + lint + format + typecheck + coverage
 ```
 
 The plugin has a server part (`@opencode/plugin`) and a TUI part (`./tui`,

@@ -61,7 +61,7 @@ hard caps absolutos, `this.d`, archivos <250 líneas, `npm run quality` verde).
 
 ## Fase 5 · Cierre y verificación
 
-- [x] 5.1 `npm run check`, `npm test`, `npm run quality` (coverage ~86.7/69.1/83.2) en verde: 217 tests + 15 evals end-to-end.
+- [x] 5.1 `npm run check`, `npm test`, `npm run quality` (coverage ~86.7/69.1/83.2) en verde: 223 tests + 17 evals end-to-end.
 - [x] 5.2 `ARCHITECTURE.md`, `CONTRACT.md`, `README.md`, `RUNBOOK.md`, `CHANGELOG.md` actualizados.
 - [x] 5.3 Smoke real: `test/smoke.test.js` corre `demos/cli` con checks ejecutables hasta `complete`.
 - [x] 5.4 Invariantes revisados. Módulos nuevos <250 líneas; `tui/model.js` (311) es deuda previa, `roles-pipeline`/`workers` bajaron respecto al baseline.
@@ -133,9 +133,36 @@ hard caps absolutos, `this.d`, archivos <250 líneas, `npm run quality` verde).
 - [x] 12.5 3 evals: reinicio básico, STOP absoluto y techo anti-loop.
 - [x] 12.6 Docs (`README`, `RUNBOOK` con systemd, `ARCHITECTURE`, `CONTRACT`, `CHANGELOG`).
 
+## Fase 13 · Context pack único
+
+- [x] 13.1 `src/mission/context-pack.js` puro con límites explícitos y relevancia por tarea.
+- [x] 13.2 `buildBrief`, `workerBrief` y briefs de roles usan el mismo pack desde disco.
+- [x] 13.3 El worker ve `verify`, requisitos ligados, facts, memoria y decisiones descartadas.
+- [x] 13.4 Eval `context-propagation`: el contexto durable llega al worker.
+
+## Fase 14 · Subagentes senior
+
+- [x] 14.1 Prompts y briefs retry-aware (`attempts`, `last_error`, "no repitas").
+- [x] 14.2 Brief del worker se refresca al ser re-admitido (`scheduler.js`).
+- [x] 14.3 Briefs específicos por rol vía `buildRoleBrief`.
+- [x] 14.4 `validateStageReport` da corrección accionable para reviewer/auditor/goal-auditor.
+- [x] 14.5 Eval `worker-retry-context`: el tercer intento recibe el error previo.
+
+## Fase 15 · Skills
+
+- [x] 15.1 Cuatro skills en `src/skills/*.md` con contrato estático.
+- [x] 15.2 `src/skills.js` los registra vía `ctx.skill.transform` con path absoluto y `autoinvoke: false`.
+- [x] 15.3 `enableSkills: false` y registro defensivo (si la API no existe, el plugin sigue vivo).
+
+## Fase 16 · Orden y nivel senior
+
+- [x] 16.1 `scripts/check-docs.mjs` en `npm run check`: scripts/tools/commands documentados.
+- [x] 16.2 `CONTRIBUTING.md`: cómo añadir rol/skill/eval + rubrica de revisión senior.
+- [x] 16.3 Arquitectura, lint, cobertura y 17 evals en verde.
+
 ## Resultado de ejecución
 
-- 217 tests verdes; `npm run quality` exit 0; `npm run eval` 15/15 exit 0.
+- 223 tests verdes; `npm run quality` exit 0; `npm run eval` 17/17 exit 0.
 - Bug real corregido: `pruneJournalArchives` ordenaba por nombre (sufijo aleatorio) y podía borrar las líneas más nuevas bajo carga; ahora ordena por `mtime`.
 - `demos/cli` tenía un check vacuo (`node --test` sin archivos salía exit 0); ahora exige `contains:pass 3`, por lo que el baseline es rojo y la verificación es real.
 

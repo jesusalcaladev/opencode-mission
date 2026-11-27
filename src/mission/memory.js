@@ -3,8 +3,8 @@
 // This is the cure for "the agent loses context after a few hours".
 
 import { objectiveOf } from "./state.js";
-import { renderFacts } from "./facts.js";
 import { selectTask } from "./decide.js";
+import { buildContextPack } from "./context-pack.js";
 
 export const MEMORY_BUDGET = 4000;
 export const JOURNAL_TAIL = 1200;
@@ -83,9 +83,6 @@ export function buildBrief({
     `Objective: ${objectiveOf(missionText)}`,
     `Workspace: ${root}`,
     "",
-    "PROJECT INSTRUCTIONS (AGENTS.md / CLAUDE.md)",
-    instructions.trim().slice(0, 6000) || "(none found)",
-    "",
     "RULES",
     "1. Use mission_write to create or edit files; use your read/glob tools to inspect.",
     "2. Call mission_check after every change. It runs the real criteria and returns per-check results.",
@@ -100,25 +97,22 @@ export function buildBrief({
     `Turn ${state.turn}/${state.max_turns} · cost $${state.cost_usd.toFixed(2)}/$${state.budget_usd.toFixed(2)} · strategy tier ${state.strategy_tier}`,
     `Autonomy: ${state.autonomy ?? (state.auto_extend ? "campaign" : "standard")} · auto-extend ${state.auto_extend ? "on" : "off"} · extensions ${state.extensions ?? 0}/${state.max_extensions ?? 3}`,
     "",
-    "REQUIREMENTS (completion requires every one to be covered by a green check)",
-    requirements.length
-      ? requirements.map((r) => `- ${r.id}: ${r.text} [${(r.checks ?? []).join(",")}]`).join("\n")
-      : "(none declared)",
+    buildContextPack({
+      state,
+      memory,
+      summary,
+      facts,
+      journal,
+      instructions,
+      results,
+      requirements,
+      progress,
+      task,
+      role: "lead",
+    }),
     "",
     "RESEARCH",
     research.trim().slice(0, 3000) || "(none)",
-    "",
-    "DURABLE FACTS",
-    renderFacts(facts) || "(none)",
-    "",
-    "DISTILLED MEMORY",
-    memory.trim() || "(empty)",
-    "",
-    "SUMMARY",
-    summary.trim() || "(empty)",
-    "",
-    "RECENT JOURNAL",
-    journal.trim().slice(-JOURNAL_TAIL) || "(empty)",
   ];
   return lines.join("\n");
 }

@@ -21,7 +21,7 @@ export const rolesPipeline = {
     this.knownWorkers.add(id);
     this.briefs.set(
       id,
-      `MISSION ${role.toUpperCase()} — ${this.d.canWrite(role) ? "may write workspace files" : "read-only"}. Report with mission_report.`
+      await this.buildRoleBrief(root, await this.d.loadState(root), role, promptText)
     );
     let failure = null;
     try {

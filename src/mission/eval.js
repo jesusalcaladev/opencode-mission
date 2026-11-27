@@ -20,6 +20,10 @@ const KEYS = [
   "restart_marker",
   "restart_attempts",
   "restarts",
+  "brief_has_facts",
+  "brief_has_memory",
+  "brief_has_verify",
+  "prompt_has_retry",
   "switched_count",
   "model_id",
 ];

@@ -7,6 +7,7 @@ import path from "node:path";
 import { Supervisor } from "./supervisor.js";
 import { duckDuckGoProvider, braveProvider, serperProvider, tavilyProvider } from "./research.js";
 import { toolDefinitions } from "./tool-definitions.js";
+import { registerSkills } from "./skills.js";
 
 const HELP = [
   "/mission start <what to do>   Plan the objective, then run it autonomously with parallel workers",
@@ -59,6 +60,16 @@ export default Plugin.define({
     supervisor.startWakeWatcher();
     supervisor.startQueueTimer();
     const registrations = [];
+
+    // Skills are optional: older OpenCode builds may not expose ctx.skill.
+    try {
+      const skillRegistration = await registerSkills(ctx, {
+        enabled: ctx.options?.enableSkills !== false,
+      });
+      if (skillRegistration) registrations.push(skillRegistration);
+    } catch {
+      // Plugin still works with brief injection alone.
+    }
 
     registrations.push(
       await ctx.websearch.transform((editor) => {

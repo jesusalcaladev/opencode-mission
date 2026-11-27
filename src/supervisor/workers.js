@@ -66,7 +66,7 @@ export const workers = {
         this.roles.set(id, this.d.ROLE.IMPLEMENTER);
         this.knownWorkers.add(id);
         if (!this.briefs) this.briefs = new Map();
-        this.briefs.set(id, this.d.workerBrief({ task, objective, workspace: workRoot }));
+        this.briefs.set(id, await this.buildWorkerBrief(root, state, task));
         spawned.push({ id, task });
       }
       if (!spawned.length) continue;
@@ -110,7 +110,12 @@ export const workers = {
         spawned.map((w) =>
           this.ctx.session.prompt({
             sessionID: w.id,
-            text: this.d.workerPrompt({ task: w.task, objective, workspace: workRoot }),
+            text: this.d.workerPrompt({
+              task: w.task,
+              objective,
+              workspace: workRoot,
+              progress,
+            }),
             delivery: "queue",
           })
         )

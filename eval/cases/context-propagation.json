@@ -1,0 +1,29 @@
+{
+  "id": "context-propagation",
+  "mode": "context",
+  "objective": "Durable context reaches every worker brief",
+  "criteria": [{ "id": "ok", "cmd": "node --version", "expect": "exit0", "timeout_ms": 5000 }],
+  "tasks": [
+    {
+      "id": 1,
+      "subject": "Create the version probe",
+      "status": "pending",
+      "blocked_by": [],
+      "verify": "ok",
+      "files": ["probe.js"]
+    }
+  ],
+  "policy": {
+    "state": {
+      "facts": [{ "kind": "decision", "subject": "stack", "text": "use snapshots for ECS" }],
+      "memoryText": "discarded approach: monolithic state"
+    }
+  },
+  "expectText": { "facts": "use snapshots for ECS", "memory": "discarded approach" },
+  "expect": {
+    "status": "context",
+    "brief_has_facts": true,
+    "brief_has_memory": true,
+    "brief_has_verify": true
+  }
+}
