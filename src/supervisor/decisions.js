@@ -130,7 +130,7 @@ export const decisions = {
       await this.persistBinding(newID, root);
       await this.ctx.session
         .synthetic({ sessionID, text: `[MISSION HANDOFF] Continuing in session ${newID}.` })
-        .catch(() => {});
+        .catch((err) => this.warn(root, "handoff notice failed", err));
     } catch (err) {
       await this.journal(root, `handoff failed, staying in session: ${this.d.shortError(err)}`);
       targetSession = sessionID;

@@ -144,6 +144,8 @@ is rejected and the lease is released for retry.
 13. Every supervisor mixin reaches dependencies only through `this.d`; no mixin
     destructures the barrel. No source file exceeds 250 lines.
 14. `npm run quality` (syntax + architecture, lint, format, typecheck, coverage) must stay green.
+    The ≤250-line gate covers `src/**` **and** `scripts/**`; best-effort failures go through
+    `Supervisor.warn()` instead of silent `.catch(() => {})`.
     `scripts/check-architecture.mjs` enforces ≤250 lines/source file, no test globals in `src/`,
     no barrel-destructuring in mixins, no terminal writes outside `decide()`/`finish`, and the
     presence of the `.mission/` write guard and the eval gate in CI. All

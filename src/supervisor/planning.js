@@ -142,7 +142,9 @@ export const planning = {
     } catch (err) {
       // If even the minimal files cannot be written, remove the workspace we
       // just created rather than leaving a broken folder behind.
-      await this.d.rm(root, { recursive: true, force: true }).catch(() => {});
+      await this.d
+        .rm(root, { recursive: true, force: true })
+        .catch((err) => this.warn(root, "partial workspace cleanup failed", err));
       const why = err instanceof Error ? err.message : String(err);
       return `Could not create the mission (${why}). No partial workspace was left behind.`;
     }

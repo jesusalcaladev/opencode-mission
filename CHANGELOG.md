@@ -54,6 +54,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- Unified best-effort warning path (`Supervisor.warn`) replaces silent catches
+  in lifecycle, roles, scheduler, planning, recovery and decisions. `debug: true`
+  also mirrors warnings to stderr.
+- Architecture size gate now covers `scripts/` too; the eval harness is split
+  into focused modules (`eval-context`, `eval-runners`, `eval-extra-runners`).
 - Cleanup pass: removed 13 blanket lint suppressions and 31 dead constants/imports
   that were hidden behind them; all `src/**` is lint-clean with no suppressions.
 - `buildDecision()` centralizes the three turn-time `decide()` call sites so

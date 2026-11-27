@@ -18,11 +18,12 @@ export function analyzeSources(files = []) {
     }
     if (file.includes("/supervisor/") && /status\s*[:=]\s*["']complete["']/.test(content))
       violations.push(`${file}: only decide()/finish may produce a terminal status`);
-    if (/\beslint-disable\b/.test(content))
+    const isSource = file.includes("/src/");
+    if (isSource && /\beslint-disable\b/.test(content))
       violations.push(`${file}: lint suppressions are not allowed; fix the code instead`);
-    if (/console\.(log|debug)\(/.test(content))
+    if (isSource && /console\.(log|debug)\(/.test(content))
       violations.push(`${file}: use the journal instead of console output`);
-    if (/\b(?:TODO|FIXME)\b/.test(content))
+    if (isSource && /\b(?:TODO|FIXME)\b/.test(content))
       violations.push(`${file}: unresolved TODO/FIXME marker`);
   }
   const writeTool = files.find((f) => f.path.endsWith("/supervisor/tools.js"));
@@ -47,7 +48,10 @@ async function main() {
     return out;
   }
 
-  const files = await walk(path.join(root, "src"));
+  const files = [
+    ...(await walk(path.join(root, "src"))),
+    ...(await walk(path.join(root, "scripts"))),
+  ];
   const violations = analyzeSources(files).map((v) => v.replace(`${root}/`, ""));
   const pkg = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
   if (!pkg.scripts?.eval) violations.push("package.json: missing npm run eval");
@@ -68,7 +72,7 @@ async function main() {
     );
     process.exit(1);
   }
-  process.stdout.write(`architecture ok: ${files.length} source files\n`);
+  process.stdout.write(`architecture ok: ${files.length} files (src + scripts)\n`);
 }
 
 const invokedDirectly = process.argv[1]?.endsWith("check-architecture.mjs");

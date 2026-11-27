@@ -38,6 +38,14 @@ export const state = {
     return this.serialize(root, () => this.d.appendJournal(root, line));
   },
 
+  /// Single best-effort warning path: always journaled, optionally mirrored to
+  /// stderr with `debug: true`. Replaces silent `.catch(() => {})` fallbacks.
+  async warn(root, label, err) {
+    const message = `${label}: ${this.d.shortError(err)}`;
+    await this.journal(root, message).catch(() => {});
+    if (this.options?.debug) process.stderr.write(`[mission] ${message}\n`);
+  },
+
   saveStateSafe(root, state) {
     return this.serialize(root, () => this.d.saveState(root, state));
   },

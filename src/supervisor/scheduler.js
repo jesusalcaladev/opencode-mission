@@ -72,7 +72,7 @@ export const scheduler = {
               text: `[MISSION WORKER] Your session went quiet but the lease for task #${w.task.id} is live. Continue the task and call mission_task_done.`,
               delivery: "queue",
             })
-            .catch(() => {});
+            .catch((err) => this.warn(root, "worker re-admit prompt", err));
           await this.d.appendJournal(
             root,
             `worker ${w.id} quiet: re-admitted task #${w.task.id} (${revives + 1}/${maxRevives})`

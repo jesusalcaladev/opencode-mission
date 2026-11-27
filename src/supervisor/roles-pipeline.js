@@ -46,7 +46,9 @@ export const rolesPipeline = {
       await this.waitWithTimeout(id, Number(this.options.workerTimeoutMs) || 600_000);
     } catch (err) {
       failure = err;
-      await this.journal(root, `role ${role} failed: ${this.d.shortError(err)}`).catch(() => {});
+      await this.journal(root, `role ${role} failed: ${this.d.shortError(err)}`).catch((cause) =>
+        this.warn(root, `role ${role} failure journal`, cause)
+      );
     } finally {
       // Cleanup must happen even when the session API throws; otherwise the
       // supervisor keeps treating a dead role as an in-flight worker forever.

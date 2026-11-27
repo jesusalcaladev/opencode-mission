@@ -150,7 +150,9 @@ export const lifecycle = {
     await this.journal(root, `mission ${status}: ${reason}`);
     const label = status === this.d.STATUS.COMPLETE ? "MISSION COMPLETE" : "MISSION STOPPED";
     const text = `[${label}] ${reason}${state.unblock ? `. Unblock: ${state.unblock}` : ""}. Mission state: ${path.join(root, ".mission")}`;
-    await this.ctx.session.synthetic({ sessionID, text }).catch(() => {});
+    await this.ctx.session
+      .synthetic({ sessionID, text })
+      .catch((err) => this.warn(root, "mission notice failed", err));
     await this.notify(label, `${text}\nworkspace: ${root}`);
     if (
       status === this.d.STATUS.COMPLETE &&

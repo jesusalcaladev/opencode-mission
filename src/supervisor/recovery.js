@@ -94,7 +94,9 @@ export const recovery = {
       this.registry.map((e) => e.root),
       30
     );
-    await this.ctx.storage.set(this.d.REGISTRY_KEY, this.registry).catch(() => {});
+    await this.ctx.storage
+      .set(this.d.REGISTRY_KEY, this.registry)
+      .catch((err) => this.warn(root, "registry persist failed", err));
   },
 
   async maybeAutoResume(sessionID, root) {

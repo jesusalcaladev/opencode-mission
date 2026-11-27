@@ -61,7 +61,7 @@ hard caps absolutos, `this.d`, archivos <250 líneas, `npm run quality` verde).
 
 ## Fase 5 · Cierre y verificación
 
-- [x] 5.1 `npm run check`, `npm test`, `npm run quality` (coverage ~86.7/69.1/83.2) en verde: 224 tests + 17 evals end-to-end.
+- [x] 5.1 `npm run check`, `npm test`, `npm run quality` (coverage ~86.7/69.1/83.2) en verde: 226 tests + 17 evals end-to-end.
 - [x] 5.2 `ARCHITECTURE.md`, `CONTRACT.md`, `README.md`, `RUNBOOK.md`, `CHANGELOG.md` actualizados.
 - [x] 5.3 Smoke real: `test/smoke.test.js` corre `demos/cli` con checks ejecutables hasta `complete`.
 - [x] 5.4 Invariantes revisados. Módulos nuevos <250 líneas; `tui/model.js` (311) es deuda previa, `roles-pipeline`/`workers` bajaron respecto al baseline.
@@ -166,9 +166,16 @@ hard caps absolutos, `this.d`, archivos <250 líneas, `npm run quality` verde).
 - [x] 17.2 `gitCommit`/`gitRevert` usan identidad inline (`-c user.name/-c user.email`).
 - [x] 17.3 CI configura identidad local además del fix en código.
 
+## Fase 18 · Calidad transversal
+
+- [x] 18.1 `Supervisor.warn(root,label,err)` centraliza los fallos best-effort (journal + `debug` opcional).
+- [x] 18.2 Reemplazados catches silenciosos en lifecycle/roles/scheduler/planning/recovery/decisions.
+- [x] 18.3 Test de concurrencia del queue de escritura (25 escrituras concurrentes sin pérdida).
+- [x] 18.4 Eval harness dividido en módulos enfocados; límite de 250 líneas extendido a `scripts/`.
+
 ## Resultado de ejecución
 
-- 224 tests verdes; `npm run quality` exit 0; `npm run eval` 17/17 exit 0.
+- 226 tests verdes; `npm run quality` exit 0; `npm run eval` 17/17 exit 0.
 - Bug real corregido: `pruneJournalArchives` ordenaba por nombre (sufijo aleatorio) y podía borrar las líneas más nuevas bajo carga; ahora ordena por `mtime`.
 - `demos/cli` tenía un check vacuo (`node --test` sin archivos salía exit 0); ahora exige `contains:pass 3`, por lo que el baseline es rojo y la verificación es real.
 
