@@ -8,6 +8,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- UI reliability: sidebar shows a compact list of active missions when the
+  current session has no scoped mission; queue state is copied on every refresh;
+  pointer/running roots are pinned so the discovery cap cannot hide the mission.
+- `OPENCODE_MISSION_CACHE_DIR` isolates the TUI registry in tests/evals so
+  synthetic missions never pollute a user's sidebar.
 - Long, well-separated task lists: campaign/relentless plans split multi-file
   tasks into one-file subtasks with preserved dependencies and stage labels.
 - Monotonic progress bar: the supervisor persists `state.progress_pct` using the
@@ -63,6 +68,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- `/missionstart` is no longer advertised as an alias (it looked glued and was
+  easy to miss); use `/mission start`, `/mission-start` or `/mission-new`. Legacy
+  input is still parsed for compatibility. Registry cache is refreshed every
+  idle turn and after handoffs.
 - Unified best-effort warning path (`Supervisor.warn`) replaces silent catches
   in lifecycle, roles, scheduler, planning, recovery and decisions. `debug: true`
   also mirrors warnings to stderr.

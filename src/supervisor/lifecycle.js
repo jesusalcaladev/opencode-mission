@@ -2,6 +2,7 @@
 import * as d from "./deps.js";
 const { os, path, mkdir, readFile, writeTextAtomic } = d;
 const cacheDir = () =>
+  process.env.OPENCODE_MISSION_CACHE_DIR ??
   path.join(os.homedir?.() ?? process.env.HOME ?? "", ".cache", "opencode-mission");
 const pointerPath = () => path.join(cacheDir(), "current.json");
 const registryPath = () => path.join(cacheDir(), "missions.json");
@@ -46,6 +47,11 @@ async function updateRegistry(root, state, objective = "") {
 }
 
 export const lifecycle = {
+  /// Keep the TUI cache fresh after every idle boundary, not only at start.
+  async publishRegistry(root, state, objective = "") {
+    await updateRegistry(root, state, objective);
+  },
+
   async start(sessionID, target, options = {}) {
     const root = path.resolve(target);
     await this.d.ensureMission(root, options);

@@ -23,6 +23,7 @@ export { computeProgress, normalizeRequirements } from "./normalize.js";
 import { metricsFromState, metricsLines } from "../mission/metrics.js";
 
 export const cacheDir = () =>
+  process.env.OPENCODE_MISSION_CACHE_DIR ??
   path.join(os.homedir?.() ?? process.env.HOME ?? "", ".cache", "opencode-mission");
 export const pointerPath = () => path.join(cacheDir(), "current.json");
 export const registryPath = () => path.join(cacheDir(), "missions.json");
@@ -196,7 +197,8 @@ export async function loadTuiModel({ missionsRoot, maxMissions = 12, sessionID }
   const pointer = await readPointer();
   const registry = await readRegistry();
   const roots = await discoverRoots(missionsRoot, maxMissions);
-  const queueData = missionsRoot ? await readJson(path.join(missionsRoot, QUEUE_FILE), []) : [];
+  const queueRoot = missionsRoot ?? (pointer?.root ? path.dirname(pointer.root) : null);
+  const queueData = queueRoot ? await readJson(path.join(queueRoot, QUEUE_FILE), []) : [];
   const queue = (Array.isArray(queueData) ? queueData : []).slice(0, 12).map((e) => ({
     id: String(e?.id ?? ""),
     objective: String(e?.objective ?? "").slice(0, 100),
@@ -205,12 +207,19 @@ export async function loadTuiModel({ missionsRoot, maxMissions = 12, sessionID }
   }));
 
   // The active session's workspace must never be dropped by the discovery cap.
-  const ownRoots = sessionID
-    ? registry
-        .filter((e) => e && e.sessionID === sessionID && typeof e.root === "string")
-        .map((e) => path.resolve(e.root))
-    : [];
-  const allRoots = [...new Set([...roots, ...ownRoots])];
+  const ownRoots = [
+    ...(sessionID
+      ? registry
+          .filter((e) => e && e.sessionID === sessionID && typeof e.root === "string")
+          .map((e) => path.resolve(e.root))
+      : []),
+    ...(pointer?.root ? [path.resolve(pointer.root)] : []),
+    ...registry
+      .filter((e) => e?.status === STATUS.RUNNING && e?.root)
+      .slice(0, 3)
+      .map((e) => path.resolve(e.root)),
+  ];
+  const allRoots = [...new Set([...ownRoots, ...roots])];
 
   // Defense in depth: a workspace can be deleted between discovery and load.
   // Never render a mission whose files are no longer on disk.
@@ -227,7 +236,6 @@ export async function loadTuiModel({ missionsRoot, maxMissions = 12, sessionID }
       objective: s.objective,
       status: s.status,
       pct: s.pct,
-      statusColor: s.status,
       updatedAt: s.updatedAt,
     }))
     .sort((a, b) => {

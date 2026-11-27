@@ -35,12 +35,13 @@ export default Plugin.define({
 
     const refresh = async (sessionID = activeSessionID) => {
       const next = await loadTuiModel({
-        missionsRoot: context.options?.missionsRoot,
+        missionsRoot: context.options?.missionsRoot ?? process.env.MISSIONS_ROOT,
         sessionID,
       });
       setModel((draft) => {
         draft.snapshot = next.snapshot;
         draft.missions = next.missions;
+        draft.queue = next.queue ?? [];
         draft.updatedAt = next.updatedAt;
       });
     };
@@ -56,7 +57,9 @@ export default Plugin.define({
 
     const schedule = () => {
       if (stopped) return;
-      const delay = model.snapshot?.status === "running" ? 1000 : 5000;
+      const recent = model.missions.some((m) => Date.now() - m.updatedAt < 600_000);
+      const queued = model.queue.some((q) => q.status === "pending");
+      const delay = model.snapshot?.status === "running" ? 1000 : recent || queued ? 2000 : 5000;
       timer = setTimeout(async () => {
         await refresh();
         schedule();
@@ -116,7 +119,12 @@ export default Plugin.define({
     const slots = [
       context.ui.slot({
         append: "sidebar.content",
-        render: () => <SidebarCard snapshot={model.snapshot} />,
+        render: () => (
+          <SidebarCard
+            snapshot={model.snapshot}
+            missions={model.missions.filter((m) => m.status === "running" || m.status === "paused")}
+          />
+        ),
       }),
       context.ui.slot({
         append: "session.panel",

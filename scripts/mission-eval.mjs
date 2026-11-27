@@ -4,8 +4,12 @@
 // A nested `node --test` criterion skips test files when this is inherited.
 delete process.env.NODE_TEST_CONTEXT;
 delete process.env.NODE_TEST_REPORTER;
+// Evals must never pollute the real TUI registry with synthetic missions.
+const evalCache = await mkdtemp(path.join(os.tmpdir(), "mission-eval-cache-"));
+process.env.OPENCODE_MISSION_CACHE_DIR = evalCache;
 
-import { readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { summarize } from "../src/mission.js";
 import { exists, rootDir, runCase } from "./eval-harness.mjs";
@@ -64,4 +68,5 @@ if (updateBaseline) {
 const text = `${JSON.stringify({ summary, gate, results }, null, 2)}\n`;
 process.stdout.write(text);
 if (out) await writeFile(path.resolve(out), text, "utf8");
+await rm(evalCache, { recursive: true, force: true }).catch(() => {});
 process.exit(gate.ok && summary.failed === 0 ? 0 : 1);

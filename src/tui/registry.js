@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 
 export const cacheDir = () =>
+  process.env.OPENCODE_MISSION_CACHE_DIR ??
   path.join(os.homedir?.() ?? process.env.HOME ?? "", ".cache", "opencode-mission");
 export const pointerPath = () => path.join(cacheDir(), "current.json");
 export const registryPath = () => path.join(cacheDir(), "missions.json");

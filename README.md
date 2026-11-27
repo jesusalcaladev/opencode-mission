@@ -214,8 +214,9 @@ TUI commands (also in the command palette): `/mission-dashboard`,
 `/mission-resume`, `/mission-open`. Default keybind: `ctrl+shift+m`.
 
 `/mission-start <objective>` takes the objective inline — no dialog. Typing it
-alone still opens the "New mission" prompt. `/missionstart` and `/mission-new`
-are aliases.
+alone still opens the "New mission" prompt. `/mission-new` is an alias; the bare
+`/missionstart` spelling is no longer advertised (use `/mission start` or
+`/mission-start`) but old input is still parsed for compatibility.
 
 | Tool                                              | Purpose                                                   |
 | ------------------------------------------------- | --------------------------------------------------------- |

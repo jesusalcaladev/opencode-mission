@@ -1,6 +1,6 @@
 // @ts-nocheck — OpenTUI's published JSX types omit color props supported at runtime.
 // Mission Control common components + sidebar card.
-import { Show } from "solid-js";
+import { For, Show } from "solid-js";
 import { barParts, budgetColor, money, statusColor, statusGlyph, truncate } from "./format.js";
 import { useColors, type MissionSnapshot } from "./types";
 
@@ -84,12 +84,33 @@ export function EmptyState() {
   );
 }
 
-export function SidebarCard(props: { snapshot: MissionSnapshot | null }) {
+export function SidebarCard(props: {
+  snapshot: MissionSnapshot | null;
+  missions?: Array<{ id: string; objective: string; status: string; pct: number }>;
+}) {
   const g = useColors();
+  const active = () => (props.missions ?? []).slice(0, 3);
+  const fallback = () =>
+    active().length ? (
+      <box flexDirection="column" gap={0}>
+        <text fg={g.faint}>mission activa en otra sesión</text>
+        <For each={active()}>
+          {(mission) => (
+            <text fg={statusColor(g, mission.status)}>
+              {statusGlyph(mission.status)} {truncate(mission.objective || mission.id, 26)}{" "}
+              <span fg={g.faint}>{mission.pct}%</span>
+            </text>
+          )}
+        </For>
+        <text fg={g.faint}>abre /mission-open en esa sesión</text>
+      </box>
+    ) : (
+      <EmptyState />
+    );
   return (
     <Section title="MISSION" minWidth={20}>
       {/* The accessor keeps every field live when the snapshot is replaced. */}
-      <Show when={props.snapshot} fallback={<EmptyState />}>
+      <Show when={props.snapshot} fallback={fallback()}>
         {(snap) => (
           <box flexDirection="column" gap={0}>
             <StatusBadge status={snap().status} />

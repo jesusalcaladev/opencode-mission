@@ -44,6 +44,11 @@ async function main() {
   const tools = [...toolsSource.matchAll(/editor\.add\(\{\s*name: "([a-z_]+)"/g)].map((m) => m[1]);
   const commands = [...indexSource.matchAll(/case "([a-z]+)":/g)].map((m) => m[1]);
   const problems = analyzeDocs({ readme, runbook, contract, scripts, tools, commands });
+  const keymap = await read("src/tui/keymap.ts");
+  if (keymap.includes('"missionstart"'))
+    problems.push(
+      "keymap: bare /missionstart alias is forbidden; use /mission-start or /mission-new"
+    );
   if (problems.length) {
     process.stderr.write(`docs check failed:\n${problems.map((p) => `  - ${p}`).join("\n")}\n`);
     process.exit(1);

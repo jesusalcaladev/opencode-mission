@@ -41,7 +41,9 @@ export function missionKeymapLayer(
         // (the server command) worked while the slash form did not.
         slash: {
           name: "mission-start",
-          aliases: ["missionstart", "mission-new"],
+          // Keep a visible separator: the bare `/missionstart` alias looked
+          // glued to users and was easy to miss in the palette.
+          aliases: ["mission-new"],
           arguments: true,
         },
         run: async (input) => {

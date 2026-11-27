@@ -61,7 +61,7 @@ hard caps absolutos, `this.d`, archivos <250 líneas, `npm run quality` verde).
 
 ## Fase 5 · Cierre y verificación
 
-- [x] 5.1 `npm run check`, `npm test`, `npm run quality` (coverage ~86.7/69.1/83.2) en verde: 234 tests + 20 evals end-to-end.
+- [x] 5.1 `npm run check`, `npm test`, `npm run quality` (coverage ~86.7/69.1/83.2) en verde: 236 tests + 20 evals end-to-end.
 - [x] 5.2 `ARCHITECTURE.md`, `CONTRACT.md`, `README.md`, `RUNBOOK.md`, `CHANGELOG.md` actualizados.
 - [x] 5.3 Smoke real: `test/smoke.test.js` corre `demos/cli` con checks ejecutables hasta `complete`.
 - [x] 5.4 Invariantes revisados. Módulos nuevos <250 líneas; `tui/model.js` (311) es deuda previa, `roles-pipeline`/`workers` bajaron respecto al baseline.
@@ -188,9 +188,20 @@ hard caps absolutos, `this.d`, archivos <250 líneas, `npm run quality` verde).
 - [x] 20.4 Leases registran `started_at`/`finished_at`; TUI muestra etapa, intentos y duración por tarea.
 - [x] 20.5 Evals `progress-monotonic` y `task-list-expansion` + tests de expansión/progreso/tiempos.
 
+## Fase 21 · UI confiable y comando pegado
+
+- [x] 21.1 `refresh()` copia `queue` y usa `MISSIONS_ROOT` como fallback.
+- [x] 21.2 Roots del pointer/misión running se priorizan antes del límite de descubrimiento.
+- [x] 21.3 Sidebar muestra misiones activas cuando la sesión actual no tiene scoped snapshot.
+- [x] 21.4 Registry cache se publica en cada idle y tras handoff.
+- [x] 21.5 Refresco 1 s running / 2 s recientes o con cola / 5 s idle.
+- [x] 21.6 Eliminado el alias pegado `/missionstart`; `/mission start`, `/mission-start` y `/mission-new` siguen funcionando.
+- [x] 21.7 `OPENCODE_MISSION_CACHE_DIR` aísla el registry en evals/tests.
+- [x] 21.8 Test `tui-visibility` (sesión desalineada) + checker que prohíbe el alias pegado.
+
 ## Resultado de ejecución
 
-- 234 tests verdes; `npm run quality` exit 0; `npm run eval` 20/20 exit 0.
+- 236 tests verdes; `npm run quality` exit 0; `npm run eval` 20/20 exit 0.
 - Bug real corregido: `pruneJournalArchives` ordenaba por nombre (sufijo aleatorio) y podía borrar las líneas más nuevas bajo carga; ahora ordena por `mtime`.
 - `demos/cli` tenía un check vacuo (`node --test` sin archivos salía exit 0); ahora exige `contains:pass 3`, por lo que el baseline es rojo y la verificación es real.
 

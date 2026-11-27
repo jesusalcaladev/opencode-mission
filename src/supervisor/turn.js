@@ -70,6 +70,11 @@ export const turn = {
       );
 
       await this.journalTurn(root, state, results, tasks, decision);
+      await this.publishRegistry(
+        root,
+        state,
+        this.d.objectiveOf(await this.readMission(root).catch(() => ""))
+      );
       state.phase = state.stage ?? state.phase;
       await this.serialize(root, () => this.d.saveMetrics(root, state.metrics));
       await this.saveStateSafe(root, state);
