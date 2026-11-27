@@ -2,6 +2,28 @@
 // All dependencies are reached through this.d (set by the Supervisor).
 
 export const decisions = {
+  /// Persist the progress floor so the TUI bar never jumps backwards when a
+  /// re-plan adds red checks or new tasks.
+  async recordProgress(root, state, results, tasks) {
+    const criteria = await this.d.loadCriteria(root);
+    const requirements = Array.isArray(criteria?.requirements)
+      ? criteria.requirements.map((req) => ({
+          ...req,
+          covered: (Array.isArray(req?.checks) ? req.checks : []).every(
+            (id) => results.find((r) => r?.id === id)?.ok === true
+          ),
+        }))
+      : [];
+    const progress = this.d.computeProgress(
+      results,
+      tasks,
+      requirements,
+      Number(state?.progress_pct) || 0
+    );
+    state.progress_pct = progress.pct;
+    return progress;
+  },
+
   /// Single place that assembles decide() inputs. Keeping stop/pause files and
   /// the baseline together prevents the three turn-time decision sites from
   /// drifting apart.

@@ -1,0 +1,29 @@
+{
+  "id": "task-list-expansion",
+  "mode": "tasks",
+  "objective": "Coarse tasks become a long, separated, verifiable list",
+  "rawPlan": {
+    "objective": "Build a tiny engine",
+    "checks": [
+      { "id": "build", "cmd": "node --check engine.js", "expect": "exit0", "kind": "build" },
+      { "id": "e2e", "cmd": "node demo.js", "expect": "exit0", "kind": "e2e" }
+    ],
+    "tasks": [
+      {
+        "id": 1,
+        "subject": "Engine files",
+        "files": ["engine.js", "ecs.js", "physics.js", "demo.js"],
+        "verify": "build",
+        "milestone": "foundation",
+        "stage": "build"
+      }
+    ],
+    "settings": { "autonomy": "campaign" }
+  },
+  "expect": {
+    "status": "tasks",
+    "valid": true,
+    "min_tasks": 4,
+    "tasks_disjoint": true
+  }
+}

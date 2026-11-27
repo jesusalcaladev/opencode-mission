@@ -1,0 +1,21 @@
+{
+  "id": "progress-monotonic",
+  "mode": "progress",
+  "objective": "The progress bar never jumps backwards after a re-plan",
+  "criteria": [{ "id": "ok", "cmd": "node --version", "expect": "exit0", "timeout_ms": 5000 }],
+  "tasks": [
+    {
+      "id": 1,
+      "subject": "Probe",
+      "status": "pending",
+      "blocked_by": [],
+      "verify": "ok",
+      "files": ["probe.js"]
+    }
+  ],
+  "policy": { "state": { "progress_pct": 60, "stage": "done" } },
+  "expect": {
+    "status": "progress",
+    "min_progress_pct": 60
+  }
+}

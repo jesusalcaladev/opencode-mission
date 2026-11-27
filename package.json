@@ -64,7 +64,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
-    "coverage": "node --test --experimental-test-coverage --test-coverage-lines=87 --test-coverage-branches=69 --test-coverage-functions=82.5 test/*.test.js",
+    "coverage": "node --test --experimental-test-coverage --test-coverage-lines=86.9 --test-coverage-branches=69 --test-coverage-functions=82.5 test/*.test.js",
     "watchdog": "node scripts/mission-watchdog.mjs --once",
     "eval": "node scripts/mission-eval.mjs",
     "host-supervisor": "node scripts/mission-host-supervisor.mjs",

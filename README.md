@@ -47,6 +47,10 @@ turns) and **task leases** (a dead worker's task is reclaimed instead of stuck f
 - **Continuous improvement** — after the objective is met, an auditor proposes
   real improvements and the harness implements them in bounded cycles until no
   valuable work remains (or a budget stops it).
+- **Long, separated task plans** — campaign/relentless missions auto-split
+  multi-file tasks into one-file subtasks with preserved dependencies, stage
+  labels and per-task timing. The progress bar is monotonic and computed from
+  the same durable state the harness uses, so a re-plan never moves it backwards.
 - **Shared durable context** — a bounded `context-pack` rebuilt from disk feeds the
   lead, every worker and every role. Workers get their check status, requirements,
   facts, discarded approaches and previous errors on retries; quiet workers get a

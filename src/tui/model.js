@@ -71,7 +71,12 @@ export async function loadMission(root) {
       ? progressData.tasks
       : [];
   const requirements = normalizeRequirements(criteria, checks);
-  const progressMetrics = computeProgress(checks, tasks, requirements);
+  const progressMetrics = computeProgress(
+    checks,
+    tasks,
+    requirements,
+    Number(state?.progress_pct) || 0
+  );
   const next = selectTask(tasks);
   const started = Number(state?.started_at ? Date.parse(state.started_at) : 0) || 0;
   const now = Date.now();

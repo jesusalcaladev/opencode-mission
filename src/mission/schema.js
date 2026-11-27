@@ -18,6 +18,7 @@ const NUMERIC = [
   "extensions",
   "max_extensions",
   "best_green",
+  "progress_pct",
   "tasks_done",
   "stall_turns",
   "strategy_tier",

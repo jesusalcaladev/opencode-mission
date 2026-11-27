@@ -45,7 +45,19 @@ export type MissionSnapshot = {
   paused: boolean;
   strategy_tier: number;
   checks: Array<{ id: string; ok: boolean; summary: string; ms: number }>;
-  tasks: Array<{ id: number; subject: string; status: string; verify: string }>;
+  tasks: Array<{
+    id: number;
+    subject: string;
+    status: string;
+    verify: string;
+    files: string[];
+    milestone: string;
+    stage: string;
+    attempts: number;
+    started_at: number;
+    finished_at: number;
+    duration_ms: number;
+  }>;
   requirements: Array<{ id: string; text: string; checks: string[]; covered: boolean }>;
   agents: Array<{
     sessionID: string;

@@ -18,6 +18,8 @@ export function fromTasks(tasks, _now = Date.now()) {
     lease_until: 0,
     last_error: "",
     verify: t.verify ?? "",
+    started_at: 0,
+    finished_at: 0,
   }));
 }
 
@@ -66,6 +68,8 @@ export function claim(
   p.owner = owner;
   p.lease_until = now + ttl;
   p.last_error = "";
+  p.started_at = Number(p.started_at) || now;
+  p.finished_at = 0;
   return true;
 }
 
@@ -83,10 +87,11 @@ export function release(progress, id, status = TASK_STATUS.COMPLETED) {
   p.owner = null;
   p.lease_until = 0;
   p.last_error = "";
+  p.finished_at = Date.now();
   return true;
 }
 
-export function fail(progress, id, error, _now = Date.now(), maxAttempts = MAX_ATTEMPTS) {
+export function fail(progress, id, error, now = Date.now(), maxAttempts = MAX_ATTEMPTS) {
   const p = progress.find((x) => x.id === id);
   if (!p) return false;
   p.attempts += 1;
@@ -95,6 +100,7 @@ export function fail(progress, id, error, _now = Date.now(), maxAttempts = MAX_A
     maxAttempts > 0 && p.attempts >= maxAttempts ? TASK_STATUS.FAILED : TASK_STATUS.PENDING;
   p.owner = null;
   p.lease_until = 0;
+  p.finished_at = now;
   return true;
 }
 

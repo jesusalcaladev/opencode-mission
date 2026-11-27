@@ -105,6 +105,46 @@ export async function readJsonFile(file) {
   }
 }
 
+export async function runProgressCase(testCase, base) {
+  const root = await prepareMission(base, testCase);
+  const ctx = fakeCtx(base, testCase);
+  const sup = new Supervisor(ctx, { enableWorkers: false, enableRoles: false });
+  await sup.start("lead", root);
+  const state = await loadState(root);
+  Object.assign(state, testCase.policy?.state ?? {});
+  await saveState(root, state);
+  const progress = await sup.recordProgress(root, state, [], []);
+  const actual = {
+    status: "progress",
+    progress_pct: progress.pct,
+    persisted: Number((await loadState(root)).progress_pct) || 0,
+    prompts: "",
+  };
+  const scored = scoreCase(testCase.expect ?? {}, actual);
+  sup.dispose();
+  return { id: testCase.id, ...scored, ...actual };
+}
+
+export async function runTaskListCase(testCase, base) {
+  const root = await prepareMission(base, testCase);
+  const ctx = fakeCtx(base, testCase);
+  const sup = new Supervisor(ctx, { enableWorkers: false, enableRoles: false });
+  await sup.start("lead", root);
+  const result = sup.d.normalizePlan(testCase.rawPlan, testCase.objective ?? "eval", root);
+  const tasks = result.ok ? result.plan.tasks : [];
+  const files = tasks.flatMap((t) => (Array.isArray(t.files) ? t.files : []));
+  const actual = {
+    status: "tasks",
+    tasks_count: tasks.length,
+    tasks_disjoint: files.length === new Set(files).size && files.length > 0,
+    valid: result.ok,
+    prompts: result.errors.join("; "),
+  };
+  const scored = scoreCase(testCase.expect ?? {}, actual);
+  sup.dispose();
+  return { id: testCase.id, ...scored, ...actual };
+}
+
 export async function runDoctorCase(testCase, base) {
   const exec = promisify(execFile);
   const root = await prepareMission(base, testCase);

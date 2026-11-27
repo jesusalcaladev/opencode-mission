@@ -34,9 +34,18 @@ export function TaskList(props: { tasks: MissionSnapshot["tasks"] }) {
           <text fg={statusColor(g, task.status)}>
             <span>{statusGlyph(task.status)} </span>
             <span fg={g.faint}>#{task.id} </span>
-            <span fg={g.base}>{truncate(task.subject, 36)}</span>
+            <span fg={g.base}>{truncate(task.subject, 34)}</span>
+            <Show when={task.stage}>
+              <span fg={g.faint}> [{truncate(task.stage, 10)}]</span>
+            </Show>
             <Show when={task.verify}>
               <span fg={g.faint}> → {task.verify}</span>
+            </Show>
+            <Show when={task.attempts > 0}>
+              <span fg={g.faint}> ×{task.attempts}</span>
+            </Show>
+            <Show when={task.duration_ms > 0}>
+              <span fg={g.faint}> {duration(task.duration_ms)}</span>
             </Show>
           </text>
         )}

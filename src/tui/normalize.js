@@ -1,30 +1,10 @@
 // Pure TUI normalization helpers. No IO, no OpenTUI, no Solid.
 import { TASK_STATUS } from "../mission/state.js";
+import { computeProgress as sharedProgress, ratio } from "../mission/progress.js";
 
-export const ratio = (a, b) => (b > 0 ? a / b : 0);
-export function computeProgress(checks, tasks, requirements) {
-  const checksGreen = checks.filter((c) => c.ok).length;
-  const tasksDone = tasks.filter((t) => t.status === TASK_STATUS.COMPLETED).length;
-  const reqCovered = requirements.filter((r) => r.covered).length;
-  const checksRatio = ratio(checksGreen, checks.length);
-  const tasksRatio = ratio(tasksDone, tasks.length);
-  const reqRatio = ratio(reqCovered, requirements.length);
-  const weighted =
-    checks.length > 0 || tasks.length > 0 || requirements.length > 0
-      ? checksRatio * 0.6 + tasksRatio * 0.3 + reqRatio * 0.1
-      : 0;
-  return {
-    checksGreen,
-    checksTotal: checks.length,
-    tasksDone,
-    tasksTotal: tasks.length,
-    reqCovered,
-    reqTotal: requirements.length,
-    pct: Math.max(0, Math.min(100, Math.round(weighted * 100))),
-    checksPct: Math.round(checksRatio * 100),
-    tasksPct: Math.round(tasksRatio * 100),
-    reqPct: Math.round(reqRatio * 100),
-  };
+export { ratio };
+export function computeProgress(checks, tasks, requirements, floor = 0) {
+  return sharedProgress(checks, tasks, requirements, floor);
 }
 
 export function normalizeChecks(state) {
@@ -48,6 +28,15 @@ export function normalizeTasks(tasks) {
     verify: String(t?.verify ?? ""),
     files: Array.isArray(t?.files) ? t.files : [],
     blocked_by: Array.isArray(t?.blocked_by) ? t.blocked_by : [],
+    milestone: String(t?.milestone ?? ""),
+    stage: String(t?.stage ?? t?.milestone ?? ""),
+    attempts: Number(t?.attempts) || 0,
+    started_at: Number(t?.started_at) || 0,
+    finished_at: Number(t?.finished_at) || 0,
+    duration_ms:
+      Number(t?.finished_at) > 0 && Number(t?.started_at) > 0
+        ? Number(t.finished_at) - Number(t.started_at)
+        : 0,
   }));
 }
 

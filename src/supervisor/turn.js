@@ -54,6 +54,7 @@ export const turn = {
       const criteria = await this.d.loadCriteria(root);
       state.last_checks_at = Date.now();
       state.history = this.d.appendHistory(state, { results, tasks });
+      await this.recordProgress(root, state, results, tasks);
 
       // A change that breaks verification is undone automatically; the mission
       // continues from the last known-good checkpoint.
@@ -90,6 +91,7 @@ export const turn = {
           state.metrics = this.d.recordMetric(state.metrics, "replans", 1);
           ({ results, tasks, baseline } = await this.verify(root, workRoot));
           state.check_baseline = baseline;
+          await this.recordProgress(root, state, results, tasks);
           decision = await this.buildDecision(root, state, { results, tasks });
           await this.journalTurn(root, state, results, tasks, decision, "after replan");
         }
@@ -108,6 +110,7 @@ export const turn = {
           await this.updateMissionCost(root, state, sessionID);
           ({ results, tasks, baseline } = await this.verify(root, workRoot));
           state.check_baseline = baseline;
+          await this.recordProgress(root, state, results, tasks);
           anyProgress = this.recordTurn(state, results, tasks, false) || anyProgress;
           decision = await this.buildDecision(root, state, { results, tasks });
           await this.journalTurn(root, state, results, tasks, decision, "after workers");

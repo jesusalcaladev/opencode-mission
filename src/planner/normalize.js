@@ -1,6 +1,7 @@
 // Plan validation and monotonic re-plan rules.
 import { SAFE_ID, DENY_CMD, VACUOUS_CMD } from "./prompt.js";
 import { normalizeSettings } from "./settings.js";
+import { expandTaskList } from "./tasks.js";
 
 function parseJson(text) {
   const raw = String(text ?? "").trim();
@@ -39,6 +40,8 @@ export function normalizePlan(raw, objective, workspace) {
   const errors = [];
   if (!data || typeof data !== "object")
     return { ok: false, errors: ["model returned no JSON object"] };
+  const settings = normalizeSettings(data.settings);
+  const campaign = settings.autonomy === "campaign";
 
   const checks = [];
   if (!Array.isArray(data.checks) || data.checks.length === 0 || data.checks.length > 24) {
@@ -76,7 +79,7 @@ export function normalizePlan(raw, objective, workspace) {
   }
 
   const checkIds = new Set(checks.map((c) => c.id));
-  const tasks = [];
+  let tasks = [];
   if (!Array.isArray(data.tasks) || data.tasks.length === 0 || data.tasks.length > 60) {
     errors.push("tasks must be an array of 1..60 items");
   } else {
@@ -97,9 +100,21 @@ export function normalizePlan(raw, objective, workspace) {
             .slice(0, 6)
         : [];
       const milestone = typeof item.milestone === "string" ? item.milestone.slice(0, 40) : "";
-      tasks.push({ id, subject, files: safeFiles(item.files), verify, blocked_by, milestone });
+      tasks.push({
+        id,
+        subject,
+        files: safeFiles(item.files),
+        verify,
+        blocked_by,
+        milestone,
+        stage: typeof item.stage === "string" ? item.stage.slice(0, 40) : milestone,
+      });
     });
   }
+  tasks = expandTaskList(tasks, {
+    target: settings.autonomy === "standard" ? 4 : 12,
+    enabled: settings.expand_tasks === true,
+  });
 
   const seen = new Set();
   for (const t of tasks) {
@@ -124,8 +139,6 @@ export function normalizePlan(raw, objective, workspace) {
     remaining.splice(remaining.indexOf(ready), 1);
   }
 
-  const settings = normalizeSettings(data.settings);
-  const campaign = settings.autonomy === "campaign";
   if (
     settings.require_e2e &&
     checks.length > 0 &&

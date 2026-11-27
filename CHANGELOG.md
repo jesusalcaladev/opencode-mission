@@ -8,6 +8,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Long, well-separated task lists: campaign/relentless plans split multi-file
+  tasks into one-file subtasks with preserved dependencies and stage labels.
+- Monotonic progress bar: the supervisor persists `state.progress_pct` using the
+  same pure calculator as the TUI, so re-plans cannot move the bar backwards.
+  Task timing (started/finished/attempts) and stages are visible in the TUI.
 - `npm run doctor`: read-only mission health report (status, budget, checks,
   stale leases, queue, host restarts, schema problems).
 - State schema guard: `loadState()` normalizes malformed/truncated state.json

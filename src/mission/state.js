@@ -69,6 +69,7 @@ export const initialState = () => ({
   extension_writes: 50,
   stall_after_turns: DEFAULT_STALL_AFTER_TURNS,
   best_green: 0,
+  progress_pct: 0,
   last_progress_turn: 0,
   strategy_tier: 1,
   stall_turns: 0,

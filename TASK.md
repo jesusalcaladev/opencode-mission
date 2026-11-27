@@ -61,7 +61,7 @@ hard caps absolutos, `this.d`, archivos <250 líneas, `npm run quality` verde).
 
 ## Fase 5 · Cierre y verificación
 
-- [x] 5.1 `npm run check`, `npm test`, `npm run quality` (coverage ~86.7/69.1/83.2) en verde: 229 tests + 18 evals end-to-end.
+- [x] 5.1 `npm run check`, `npm test`, `npm run quality` (coverage ~86.7/69.1/83.2) en verde: 234 tests + 20 evals end-to-end.
 - [x] 5.2 `ARCHITECTURE.md`, `CONTRACT.md`, `README.md`, `RUNBOOK.md`, `CHANGELOG.md` actualizados.
 - [x] 5.3 Smoke real: `test/smoke.test.js` corre `demos/cli` con checks ejecutables hasta `complete`.
 - [x] 5.4 Invariantes revisados. Módulos nuevos <250 líneas; `tui/model.js` (311) es deuda previa, `roles-pipeline`/`workers` bajaron respecto al baseline.
@@ -180,9 +180,17 @@ hard caps absolutos, `this.d`, archivos <250 líneas, `npm run quality` verde).
 - [x] 19.3 `npm run doctor`: informe read-only de salud (stale leases, budget, baseline, cola, host restarts, problemas de esquema).
 - [x] 19.4 Eval `doctor-clean` y tests de esquema/corrupción.
 
+## Fase 20 · Listas largas y progreso correcto
+
+- [x] 20.1 `expandTaskList` divide tareas multi-archivo en subtareas de un archivo, renumerando y remapeando dependencias.
+- [x] 20.2 `normalizePlan` conserva `stage`/`milestone`, expansion automática en campaign/relentless y prompt que exige 12-40 tareas.
+- [x] 20.3 `src/mission/progress.js` calcula progreso verificado por tarea con piso monotónico `state.progress_pct`.
+- [x] 20.4 Leases registran `started_at`/`finished_at`; TUI muestra etapa, intentos y duración por tarea.
+- [x] 20.5 Evals `progress-monotonic` y `task-list-expansion` + tests de expansión/progreso/tiempos.
+
 ## Resultado de ejecución
 
-- 229 tests verdes; `npm run quality` exit 0; `npm run eval` 18/18 exit 0.
+- 234 tests verdes; `npm run quality` exit 0; `npm run eval` 20/20 exit 0.
 - Bug real corregido: `pruneJournalArchives` ordenaba por nombre (sufijo aleatorio) y podía borrar las líneas más nuevas bajo carga; ahora ordena por `mtime`.
 - `demos/cli` tenía un check vacuo (`node --test` sin archivos salía exit 0); ahora exige `contains:pass 3`, por lo que el baseline es rojo y la verificación es real.
 

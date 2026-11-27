@@ -25,11 +25,15 @@ const KEYS = [
   "brief_has_verify",
   "prompt_has_retry",
   "doctor_ok",
+  "tasks_disjoint",
+  "valid",
   "switched_count",
   "model_id",
 ];
 
 const MINIMUMS = {
+  min_progress_pct: "progress_pct",
+  min_tasks: "tasks_count",
   min_checks_green: "checks_green",
   min_cost_usd: "cost_usd",
   min_tokens: "tokens",

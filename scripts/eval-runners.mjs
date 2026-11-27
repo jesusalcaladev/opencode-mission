@@ -19,7 +19,9 @@ import {
   runContextCase,
   runDoctorCase,
   runHostRestartCase,
+  runProgressCase,
   runRotationCase,
+  runTaskListCase,
 } from "./eval-extra-runners.mjs";
 
 export async function runMission(testCase, base, maxTurns) {
@@ -141,6 +143,8 @@ export async function runCase(testCase, maxTurns = 24) {
       "host-restart": () => runHostRestartCase(testCase, base),
       context: () => runContextCase(testCase, base),
       doctor: () => runDoctorCase(testCase, base),
+      progress: () => runProgressCase(testCase, base),
+      tasks: () => runTaskListCase(testCase, base),
       "retry-context": () => runContextCase(testCase, base),
       mission: () => runMission(testCase, base, maxTurns),
       wake: () => runMission(testCase, base, maxTurns),

@@ -52,7 +52,7 @@ src/
     search.js              DuckDuckGo/Brave/Serper/Tavily providers + cache
     images.js              image search, download, generation
     report.js              report building and mission plan
-  planner.js               facade for ./planner/*
+  planner.js               facade for ./planner/* (tasks.js splits coarse tasks)
   planner/
     prompt.js              planner prompt + safe command rules
     settings.js            normalize plan settings (relentless = 0 ceilings)
@@ -65,6 +65,7 @@ src/
     context-pack.js        bounded disk-backed context shared by every brief
     host-restart.js        pure host-restart decision (WAKE, STOP, backoff, cap)
     schema.js              pure state validation + normalization on load
+    progress.js            pure, monotonic progress shared by harness and TUI
     cost.js                pure per-session cost merge (monotonic)
     quality.js             mutation/vacuity decision rules (pure)
     locks.js               per-file locks for a shared workspace (pure)
@@ -159,9 +160,12 @@ is rejected and the lease is released for retry.
 17. The bounded `context-pack` is the single source of briefing context for the
     lead, workers and roles. Skills carry only static workflow contracts; dynamic
     state is never duplicated into a skill.
-18. `loadState()` normalizes malformed durable state to safe defaults; `npm run doctor`
+18. Progress is computed by one pure module from harness evidence, persisted as a
+    floor (`state.progress_pct`) and never decreases; planned tasks are split into
+    disjoint, stage-labelled, individually verifiable units.
+19. `loadState()` normalizes malformed durable state to safe defaults; `npm run doctor`
     is read-only and reports schema problems without touching files.
-19. The host supervisor is opt-in: it reacts only to a `WAKE` that stayed stale,
+20. The host supervisor is opt-in: it reacts only to a `WAKE` that stayed stale,
     never writes `state.json`/criteria/tasks, and is bounded by `STOP`/`PAUSE`,
     exponential backoff and `max_restarts` per window.
 
