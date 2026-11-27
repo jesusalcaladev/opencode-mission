@@ -61,7 +61,7 @@ hard caps absolutos, `this.d`, archivos <250 líneas, `npm run quality` verde).
 
 ## Fase 5 · Cierre y verificación
 
-- [x] 5.1 `npm run check`, `npm test`, `npm run quality` (coverage ~86.7/69.1/83.2) en verde: 226 tests + 17 evals end-to-end.
+- [x] 5.1 `npm run check`, `npm test`, `npm run quality` (coverage ~86.7/69.1/83.2) en verde: 229 tests + 18 evals end-to-end.
 - [x] 5.2 `ARCHITECTURE.md`, `CONTRACT.md`, `README.md`, `RUNBOOK.md`, `CHANGELOG.md` actualizados.
 - [x] 5.3 Smoke real: `test/smoke.test.js` corre `demos/cli` con checks ejecutables hasta `complete`.
 - [x] 5.4 Invariantes revisados. Módulos nuevos <250 líneas; `tui/model.js` (311) es deuda previa, `roles-pipeline`/`workers` bajaron respecto al baseline.
@@ -173,9 +173,16 @@ hard caps absolutos, `this.d`, archivos <250 líneas, `npm run quality` verde).
 - [x] 18.3 Test de concurrencia del queue de escritura (25 escrituras concurrentes sin pérdida).
 - [x] 18.4 Eval harness dividido en módulos enfocados; límite de 250 líneas extendido a `scripts/`.
 
+## Fase 19 · Robustez del estado y diagnóstico
+
+- [x] 19.1 `src/mission/schema.js`: `stateProblems` + `normalizeState` reparan state.json corrupto.
+- [x] 19.2 `loadState` normaliza antes de entregar el estado al supervisor o al TUI.
+- [x] 19.3 `npm run doctor`: informe read-only de salud (stale leases, budget, baseline, cola, host restarts, problemas de esquema).
+- [x] 19.4 Eval `doctor-clean` y tests de esquema/corrupción.
+
 ## Resultado de ejecución
 
-- 226 tests verdes; `npm run quality` exit 0; `npm run eval` 17/17 exit 0.
+- 229 tests verdes; `npm run quality` exit 0; `npm run eval` 18/18 exit 0.
 - Bug real corregido: `pruneJournalArchives` ordenaba por nombre (sufijo aleatorio) y podía borrar las líneas más nuevas bajo carga; ahora ordena por `mtime`.
 - `demos/cli` tenía un check vacuo (`node --test` sin archivos salía exit 0); ahora exige `contains:pass 3`, por lo que el baseline es rojo y la verificación es real.
 

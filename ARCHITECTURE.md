@@ -64,6 +64,7 @@ src/
     state.js               constants, defaults, task normalization (pure)
     context-pack.js        bounded disk-backed context shared by every brief
     host-restart.js        pure host-restart decision (WAKE, STOP, backoff, cap)
+    schema.js              pure state validation + normalization on load
     cost.js                pure per-session cost merge (monotonic)
     quality.js             mutation/vacuity decision rules (pure)
     locks.js               per-file locks for a shared workspace (pure)
@@ -158,7 +159,9 @@ is rejected and the lease is released for retry.
 17. The bounded `context-pack` is the single source of briefing context for the
     lead, workers and roles. Skills carry only static workflow contracts; dynamic
     state is never duplicated into a skill.
-18. The host supervisor is opt-in: it reacts only to a `WAKE` that stayed stale,
+18. `loadState()` normalizes malformed durable state to safe defaults; `npm run doctor`
+    is read-only and reports schema problems without touching files.
+19. The host supervisor is opt-in: it reacts only to a `WAKE` that stayed stale,
     never writes `state.json`/criteria/tasks, and is bounded by `STOP`/`PAUSE`,
     exponential backoff and `max_restarts` per window.
 

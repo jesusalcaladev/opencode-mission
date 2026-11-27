@@ -335,6 +335,7 @@ npm install
 npm run check          # syntax + architecture guardrails (size, test globals, boundaries)
 npm test               # full suite, no network or TUI required
 npm run eval           # end-to-end eval cases through the real supervisor
+npm run doctor -- ./missions/<workspace>  # read-only mission health report
 npm run eval -- --filter cli-standard --json
 npm run test:watch     # watch tests while developing
 npm run lint           # eslint (strict rules)

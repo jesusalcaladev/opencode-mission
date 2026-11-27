@@ -24,6 +24,7 @@ const KEYS = [
   "brief_has_memory",
   "brief_has_verify",
   "prompt_has_retry",
+  "doctor_ok",
   "switched_count",
   "model_id",
 ];

@@ -208,6 +208,19 @@ true right now** (disk state, facts, memory, journal, checks, retry history). Ne
 put dynamic mission facts into a skill: it would go stale. Workers and roles receive
 the same bounded context pack as the lead, filtered to their task.
 
+## Doctor (read-only)
+
+```sh
+npm run doctor -- ~/missions/<workspace>
+npm run doctor -- ~/missions/<workspace> --json
+```
+
+It reports terminal status, turn/budget/tokens, check and task progress, stale
+leases, failed tasks, strategy tier, extensions, baseline coverage, queue stats,
+host restarts and **schema problems** in the durable state. It never writes files.
+`loadState` now normalizes malformed fields to safe defaults, so a hand-edited or
+truncated `state.json` cannot crash the supervisor.
+
 ## Verify the harness itself
 
 ```sh

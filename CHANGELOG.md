@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `npm run doctor`: read-only mission health report (status, budget, checks,
+  stale leases, queue, host restarts, schema problems).
+- State schema guard: `loadState()` normalizes malformed/truncated state.json
+  to safe defaults instead of crashing the loop.
 - End-to-end eval harness integrated with the real Supervisor: 8 deterministic
   cases, `npm run eval`, baseline regression gate and CI step.
 - Budget forecast from durable telemetry (cost/tokens/minutes per turn) with

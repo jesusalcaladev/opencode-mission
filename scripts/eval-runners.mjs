@@ -15,7 +15,12 @@ import {
   writeTextAtomic,
 } from "../src/mission.js";
 import { exists, fakeCtx, prepareMission } from "./eval-context.mjs";
-import { runContextCase, runHostRestartCase, runRotationCase } from "./eval-extra-runners.mjs";
+import {
+  runContextCase,
+  runDoctorCase,
+  runHostRestartCase,
+  runRotationCase,
+} from "./eval-extra-runners.mjs";
 
 export async function runMission(testCase, base, maxTurns) {
   const root = await prepareMission(base, testCase);
@@ -135,6 +140,7 @@ export async function runCase(testCase, maxTurns = 24) {
       rotation: () => runRotationCase(testCase, base),
       "host-restart": () => runHostRestartCase(testCase, base),
       context: () => runContextCase(testCase, base),
+      doctor: () => runDoctorCase(testCase, base),
       "retry-context": () => runContextCase(testCase, base),
       mission: () => runMission(testCase, base, maxTurns),
       wake: () => runMission(testCase, base, maxTurns),

@@ -1,0 +1,18 @@
+{
+  "id": "doctor-clean",
+  "mode": "doctor",
+  "objective": "Doctor reports a healthy mission without mutating it",
+  "criteria": [{ "id": "ok", "cmd": "node --version", "expect": "exit0", "timeout_ms": 5000 }],
+  "tasks": [
+    {
+      "id": 1,
+      "subject": "Probe node",
+      "status": "pending",
+      "blocked_by": [],
+      "verify": "ok",
+      "files": ["probe.js"]
+    }
+  ],
+  "settings": { "status": "running", "stage": "done", "max_turns": 6 },
+  "expect": { "status": "doctor", "doctor_ok": true }
+}

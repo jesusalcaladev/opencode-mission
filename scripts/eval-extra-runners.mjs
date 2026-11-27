@@ -83,7 +83,7 @@ export async function runHostRestartCase(testCase, base) {
     "--backoff-ms",
     "1000",
   ]);
-  const report = JSON.parse(stdout.trim().split("\n").at(-1));
+  const report = JSON.parse(stdout.trim());
   const marker = path.join(root, "restarted.txt");
   const actual = {
     status: "host-restart",
@@ -103,6 +103,26 @@ export async function readJsonFile(file) {
   } catch {
     return null;
   }
+}
+
+export async function runDoctorCase(testCase, base) {
+  const exec = promisify(execFile);
+  const root = await prepareMission(base, testCase);
+  const script = path.join(rootDir, "scripts", "mission-doctor.mjs");
+  const { stdout } = await exec(process.execPath, [script, "--json", root]);
+  const report = JSON.parse(stdout.trim());
+  const scored = scoreCase(testCase.expect ?? {}, {
+    status: "doctor",
+    doctor_ok: Array.isArray(report.problems) && report.problems.length === 0,
+    prompts: stdout,
+  });
+  return {
+    id: testCase.id,
+    ...scored,
+    status: "doctor",
+    doctor_ok: scored.pass,
+    problems: report.problems,
+  };
 }
 
 export async function runRotationCase(testCase, base) {

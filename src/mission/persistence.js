@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { FILES, VERSION, initialState, normalizeTask } from "./state.js";
 import { metricsFromState } from "./metrics.js";
+import { normalizeState } from "./schema.js";
 
 export function missionDir(root) {
   return path.join(root, FILES.dir);
@@ -57,7 +58,7 @@ export async function readList(file) {
 }
 
 export async function loadState(root) {
-  return readJson(path.join(missionDir(root), FILES.state), initialState());
+  return normalizeState(await readJson(path.join(missionDir(root), FILES.state), initialState()));
 }
 export async function saveState(root, state) {
   await writeJsonAtomic(path.join(missionDir(root), FILES.state), state);
